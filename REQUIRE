@@ -1,1 +1,7 @@
 julia 0.4
+Polynomials 0.1.0
+Optim 0.6.0
+ControlCore 0.0.1
+Compat 0.9.0
+ToeplitzMatrices 0.1.1
+GeneralizedSchurAlgorithm 0.0.2
