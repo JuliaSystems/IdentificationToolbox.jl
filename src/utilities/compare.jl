@@ -1,7 +1,7 @@
 @doc """`MSE, fit = compare(m, d)`
 Compare model `m` with validation data `d` using one step ahead prediction. Returns the mean square error `MSE` and the fit value `fit = 100 * (1 - √MSE / (y-mean(y)))`. See also `pred`.
 """ ->
-function compare(m::IdDSisoRational, d::IdDataObject)
+function compare(m::IdMFD, d::IdDataObject)
     # compare true system with estimated model (validation)
     y = d.y
     y_est = predict(m, d)

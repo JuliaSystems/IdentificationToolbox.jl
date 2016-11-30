@@ -5,12 +5,10 @@ import Base.==
 # Import printing functions
 import Base: showcompact, show, showall, summary
 
+import ControlCore: isdiscrete, samplingtime, numstates, numinputs, numoutputs
+import ControlCore: Siso, Continuous
+
 export
-  # datatypes
-  IdDataObject,
-  IdDSs,
-  IdDSisoRational,
-  iddata,
   # utilities
   detrend,
   detrend!,
@@ -28,33 +26,37 @@ export
   morsm,  MORSM,
   pem,
   # method functions
+  cost,
   predict,
   fitmodel
 
-using Polynomials, Optim, ControlCore, ToeplitzMatrices,
+using Polynomials, Optim, PolynomialMatrices, ControlCore, ToeplitzMatrices,
   GeneralizedSchurAlgorithm, Compat
+
+typealias PolyMatrix PolynomialMatrices.PolyMatrix
 
 # types
 include("types/iddata.jl")
 include("types/idmethods.jl")
 include("types/idinfo.jl")
-include("types/iddsisorational.jl")
+include("types/idmfd.jl")
 include("types/iddss.jl")
 
 # utilities
+include("utilities/filt.jl")
 include("utilities/filtic.jl")
 include("utilities/detrend.jl")
 include("utilities/compare.jl")
 
 # methods
-include("methods/pem.jl")
-include("methods/armax.jl")
-include("methods/bj.jl")
+#include("methods/pem.jl")
+#include("methods/armax.jl")
+#include("methods/bj.jl")
 include("methods/oe.jl")
-include("methods/arx.jl")
-include("methods/fir.jl")
-include("methods/stmcb.jl")
-include("methods/morsm.jl")
-include("methods/n4sid.jl")
+#include("methods/arx.jl")
+#include("methods/fir.jl")
+#include("methods/stmcb.jl")
+#include("methods/morsm.jl")
+#include("methods/n4sid.jl")
 
 end # module

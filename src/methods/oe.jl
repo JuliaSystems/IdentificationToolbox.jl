@@ -1,34 +1,38 @@
-# IterativeIdMethod definition
+abstract AbstractModelOrder
 
-immutable OE <: IterativeIdMethod
-  ic::Symbol
-  autodiff::Bool
+immutable FullPolynomialOrder <: AbstractModelOrder
+  na::Int
+  nb::Int
+  nf::Int
+  nc::Int
+  nd::Int
+  nk::Vector{Int}
+end
 
-  @compat function (::Type{OE})(ic::Symbol, autodiff::Bool)
-      new(ic, autodiff)
+abstract PolynomialModel{T,S}
+
+immutable OE{T,S,P<:AbstractModelOrder} <: PolynomialModel{T,S}
+  orders::P
+
+  @compat function (::Type{OE})(nb::Int, nf::Int, nk::Int=1)
+    orders = FullPolynomialOrder(0, nb, nf, 0, 0, nk)
+    new{ControlCore.Siso{true},ControlCore.Continuous{false},
+     FullPolynomialOrder}(orders)
+  end
+
+  @compat function (::Type{OE})(nb::Int, nf::Int, nk::Vector{Int})
+    orders = FullPolynomialOrder(0, nb, nf, 0, 0, nk)
+    new{ControlCore.Siso{false},ControlCore.Continuous{false},
+     FullPolynomialOrder}(orders)
+  end
+
+  @compat function (::Type{OE}){P<:AbstractModelOrder}(orders::P)
+    new{ControlCore.Siso{false},ControlCore.Continuous{false},
+     FullPolynomialOrder}(orders)
   end
 end
 
-function OE(;ic::Symbol=:truncate, autodiff::Bool=false)
-  OE(ic, autodiff)
-end
 
-function fval{T1<:Real, V1<:AbstractVector, V2<:AbstractVector, T2<:Real}(
-    data::IdDataObject{T1,V1,V2}, n::Vector{Int}, x::Vector{T2}, method::OE,
-    last_x::Vector{T2}, last_V::Vector{T2}, storage::Matrix{T2})
-  calc_oe(data, n, x, method)
-end
-
-function gradhessian!{T1<:Real, V1<:AbstractVector, V2<:AbstractVector, T2<:Real}(
-    data::IdDataObject{T1,V1,V2}, n::Vector{Int}, x::Vector{T2}, method::OE,
-    last_x::Vector{T2}, last_V::Vector{T2}, storage::Matrix{T2})
-  calc_oe_der!(data, n, x, method, last_x, last_V, storage)
-end
-
-function IdDSisoRational{T<:Real}(data::IdDataObject{T}, n::Vector{Int},
-    opt::Optim.OptimizationResults, method::OE)
-  _oe(data, n, opt, method)
-end
 
 """
     `oe(data, nb, nf, nk=1)`
@@ -112,6 +116,69 @@ function predict{T1<:Real, V1<:AbstractVector, V2<:AbstractVector, T2<:Real}(
     y_est = filt(b, f, u)
   end
   return y_est
+end
+
+function predict{T1<:Real,V1,V2,T2<:Real}(
+    data::IdDataObject{T1,V1,V2},
+    model::OE{ControlCore.Siso{false},ControlCore.Continuous{false},
+    FullPolynomialOrder}, Θ::Vector{T2}; ic::Symbol=:zero)
+  nb    = model.orders.nb
+  nf    = model.orders.nf
+  nk    = model.orders.nk
+  y,u   = data.y, data.u
+  ny,nu = data.ny, data.nu
+
+  x = reshape(Θ,(nf+nb)*ny,nu)
+
+  # zero pad vectors
+  b = PolyMatrix(vcat(zeros(T2,ny,nu), x[1:nb*ny,1:nu]), (ny,nu))
+  f = PolyMatrix(vcat(eye(T2,ny), x[nb*ny+(1:nf*ny),1:nu]), (ny,nu))
+
+  est(y,u,b,f,nk,ic)
+end
+
+oeorders(n::FullPolynomialOrder) = (n.nb, n.nf, n.nk)
+
+function psit{T1<:Real,V1,V2,T2<:Real}(
+    data::IdDataObject{T1,V1,V2},
+    model::OE{ControlCore.Siso{false},ControlCore.Continuous{false},
+    FullPolynomialOrder}, Θ::Vector{T2})
+
+  y, u     = data.y, data.u
+  nb,nf,nk = oeorders(model.orders)
+  m        = max(nf, nb+nk-1)+1
+  N        = length(y)
+  k        = nf+nb
+
+  y_est = predict(data, n, x, method)
+
+
+  f          = append!(append!(ones(T2,1), x[nb+1:end]), zeros(T2,m-nf))
+  one_size_f = append!(ones(T2,1), zeros(T2,nf-1))
+  eps        = y-y_est
+  yf         = filt(one_size_f, f, y_est)
+  uf         = filt(one_size_f, f, u)
+
+  Psit = zeros(T2,N,k)
+  @simd for i = 1:nb
+    @inbounds Psit[m:N, i]   = uf[m-nk+1-i:N-nk+1-i]
+  end
+  @simd for i = 1:nf
+    @inbounds Psit[m:N,nb+i] = -yf[m-i:N-i]
+  end
+  return psit
+end
+
+function est{T}(y::AbstractArray{T}, u::AbstractArray{T}, b::PolyMatrix,
+  f::PolyMatrix, nk::Vector{Int}, ic::Symbol=:zero)
+  if ic == :truncate
+    # assume y_est = y for t=1:m to find initial states for the filters
+    y_est[1:m]   = y[1:m]
+    si           = filtic(b, f, y[m:-1:1], u[m:-1:1])
+    y_est[m+1:N] = filt(b, f, u[m+1:N], si)
+  end
+  # zero initial conditions
+  return filt(b, f, u)
 end
 
 # cost function

@@ -9,8 +9,8 @@ immutable IterativeIdInfo{T<:IterativeIdMethod} <: IdInfo
 end
 
 immutable OneStepIdInfo{T<:OneStepIdMethod} <: IdInfo
-  mse::Float64
-  modelfit::Float64
+  mse::Vector{Float64}
+  modelfit::Vector{Float64}
   method::T
   n::Vector{Int}
 end

@@ -14,7 +14,7 @@ Author : Lars Lindemann @2015
                                                                    =#
 #####################################################################
 
-immutable IdDataObject{T<:Real,V1<:AbstractVector{T},V2<:AbstractVector{T}}
+immutable IdDataObject{T<:Real,V1<:AbstractArray{T},V2<:AbstractArray{T}}
     y::V1
     u::V2
     Ts::Float64
@@ -22,7 +22,7 @@ immutable IdDataObject{T<:Real,V1<:AbstractVector{T},V2<:AbstractVector{T}}
     nu::Int
     ny::Int
 
-    @compat function (::Type{IdDataObject}){T}(y::Array{T}, u::Array{T}, Ts::Float64)
+    @compat function (::Type{IdDataObject}){T}(y::AbstractArray{T}, u::AbstractArray{T}, Ts::Float64)
         N   = size(y, 1);
         ny  = size(y, 2);
         nu  = size(u, 2);

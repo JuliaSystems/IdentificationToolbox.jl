@@ -16,60 +16,62 @@ function fitmodel{T<:Real}(data::IdDataObject{T}, n::Vector{Int}, method::ARX; k
   arx(data, n, method)
 end
 
-function arx{T<:Real}(data::IdDataObject{T}, n::Vector{Int}, method::ARX=ARX())
-  y,u      = data.y, data.u
-  N        = size(y,1)
-  na,nb,nk = n
-  m        = max(na,nb+nk-1)
-  @assert na > -1 string("na must be positive")
-  @assert nb > -1 string("nb must be positive")
-  @assert nk > -1 string("nk must be positive")
-  @assert na+nb > 0 string("na+nb must be greater than zero")
+arx{T<:Real}(data::IdDataObject{T}, n::Vector{Int}, method::ARX=ARX()) =
+  arx(data, n[1], n[2], n[3], method)
+
+function arx{T<:Real}(data::IdDataObject{T}, na::Int, nb::Int,
+    nk::Vector{Int}, method::ARX=ARX())
+  y,u = data.y, data.u
+  ny  = data.ny
+  nu  = data.nu
+  N   = size(y,1)
+  m   = _arxordercheck(na,nb,nk)
 
   # estimate model
-  x, mse = _arx(data, n, method)
+  x, mse = _arx(data, na, nb, nk; method=method)
 
-  # Calculate model error
-  modelfit = 100*(1 - mse/norm(y[m:N]-mean(y[m:N])))
+  # Calculate model error 100*(1 - mse[i]/cov(y[m:N,i]))
+  modelfit = [100*(1 - mse[i]/cov(y[m:N,i])) for i in 1:ny]
+
+  idinfo = OneStepIdInfo(mse, modelfit, method, vcat([na,nb],nk))
+
+  A = view(x, 1:(na+1)*ny, :)
+  B = view(x, (na+1)*ny+1:size(x,1), :)
+  C = speye(T,ny)
+  D = speye(T,ny)
+  F = speye(T,ny)
+  IdMFD(A, B, C, D, F, data.Ts, idinfo, ny)
+end
+
+function _arxordercheck(na,nb,nk)
+  @assert na > -1       string("na must be positive")
+  @assert nb > -1       string("nb must be positive")
+  @assert all(nk .> -1) string("nk must be positive")
+  @assert na+nb > 0     string("na+nb must be greater than zero")
+  max(na,nb+maximum(nk)-1)
+end
+
+function arx{T<:Real, V1<:AbstractVector, V2<:AbstractVector}(
+  data::IdDataObject{T,V1,V2}, na::Int, nb::Int,
+    nk::Int, method::ARX=ARX())
+  y,u = data.y, data.u
+  N   = size(y,1)
+  m   = _arxordercheck(na,nb,nk)
+
+  # estimate model
+  x, mse = _arx(data, na, nb, nk; method=method)
+
+  # Calculate model error 100*(1 - mse[i]/cov(y[m:N,i]))
+  modelfit = 100*(1 - mse/cov(y[m:N]))
+
+  idinfo = OneStepIdInfo(mse, modelfit, method, [na,nb,nk])
 
   a = vcat(ones(T,1),   x[1:na])
   b = vcat(zeros(T,nk), x[na+1:na+nb])
   c = ones(T,1)
   d = ones(T,1)
   f = ones(T,1)
-  idinfo = OneStepIdInfo(mse, modelfit, method, n)
-  IdDSisoRational(a, b, c, d, f, data.Ts, idinfo)
-end
-
-function _arx{T<:Real, V1<:AbstractVector, V2<:AbstractVector}(
-    data::IdDataObject{T,V1,V2}, n::Vector{Int},
-    method::ARX=method(:truncate, false))
-  ic          = method.ic
-  feedthrough = method.feedthrough
-  y, u     = data.y, data.u
-  na,nb,nk = n
-  N        = size(y,1)
-  m        = max(na, nb)
-  md       = max(na, nb+nk-1)
-  l        = 2
-
-  theta  = zeros(float(T),nb+na)
-  thetam = zeros(float(T),2*m)
-  # Compute efficiently for order m
-  if ic == :truncate
-    col, row, Y = _fill_truncate_ic(data, md, m, n, feedthrough)
-  elseif ic == :zero
-    col, row, Y = _fill_zero_ic(data, md, m, n, feedthrough)
-  end
-  thetam[:] = _ls_toeplitz(col, row, Y)
-  # remove extra parameters and order correctly
-  theta[1:nb]     = thetam[1:l:(nb-1)*l+1]
-  theta[nb+1:end] = thetam[l:l:na*l]
-
-  # calculate mse
-  y_est = _predict_arx(y, u, na, nb, nk, theta; ic=ic)
-  mse   = sumabs2(data.y-y_est)/(N-m+1)
-  return theta, mse
+  IdMFD(a, b, c, d, f, data.Ts, idinfo)
 end
 
 function predict{T1<:Real, V1<:AbstractVector, V2<:AbstractVector, V3<:AbstractVector}(
@@ -100,158 +102,159 @@ function _predict_arx{V1<:AbstractVector, V2<:AbstractVector, V3<:AbstractVector
 end
 
 function _arx{T<:Real, A1<:AbstractArray, A2<:AbstractArray}(
-    data::IdDataObject{T,A1,A2}, na::Matrix{Int}, nb::Matrix{Int}, nk::Matrix{Int};
+    data::IdDataObject{T,A1,A2}, na::Int, nb::Int, nk::Int;
     method::ARX=ARX())
-  @assert size(u,1) == size(y,1) string("Input and output need have the same number of samples")
+    return _arx(data, na, nb, [nk]; method=method)
+end
+
+function _arx{T<:Real, A1<:AbstractArray, A2<:AbstractArray}(
+    data::IdDataObject{T,A1,A2}, na::Int, nb::Vector{Int}, nk::Vector{Int};
+    method::ARX=ARX())
+    return _arx(data, [na], nb, nk; method=method)
+end
+
+function _arx{T<:Real, A1<:AbstractArray, A2<:AbstractArray}(
+    data::IdDataObject{T,A1,A2}, na::Vector{Int}, nb::Int, nk::Int;
+    method::ARX=ARX())
+    return _arx(data, na, [nb], [nk]; method=method)
+end
+
+function _arx{T<:Real, A1<:AbstractArray, A2<:AbstractArray}(
+    data::IdDataObject{T,A1,A2}, na::Int, nb::Int, nk::Vector{Int};
+    method::ARX=ARX())
   y,u = data.y, data.u
   N   = size(y,1)
-  ny  = size(y,2)
-  nu  = size(u,2)
-  @assert size(nb,2) == nu string("nb must have correct size")
-  @assert size(nb,1) == ny string("nb must have correct size")
-  @assert size(na,2) == ny string("na must have correct size")
-  @assert size(na,1) == ny string("na must have correct size")
-  @assert size(nk,2) == nu string("nk must have correct size")
-  @assert size(nk,1) == ny string("nk must have correct size")
+  ny  = data.ny
+  nu  = data.nu
+  feedthrough = method.feedthrough
+  @assert size(u,1)  == N "Input and output need have the same number of samples"
+#  @assert length(nb) == nu "nb must have correct size"
+#  @assert length(na) == ny "na must have correct size"
+  @assert length(nk) == nu "nk must have correct size"
+  @assert !feedthrough || ny == nu "Only square B matrices with feedthrough supported"
+  @assert !any(nk .< 0) "Negative delays present"
+
+  # handle variable nk
+  if any(nk .== 0)
+    ye = vcat(y[:,:], zeros(T,1,ny))
+    ue = vcat(zeros(T,1,nu), u)
+    nk += ones(nu)
+  else
+    ye = y[:,:]
+    ue = u[:,:]
+  end
+  Nk = maximum(nk)
+  ut = zeros(T,size(ue)...)
+  for i = 1:nu
+    if nk[i] > 1
+      ut[nk[i]:end,i] = ue[1:end-nk[i]+1,i]
+    else
+      ut[:,i] = ue[:,i]
+    end
+  end
+  datat = iddata(ye,ut)
+
+  # assume nk = 1 for all input output pairs
 
   m = max(maximum(na), maximum(nb))
-  md = max(maximum(na), maximum(nb+nk)-1)
-  l = nu+1
-  theta::Vector{T} = zeros(T,sum(nb)+sum(na))
-  thetam::Matrix{T} = zeros(T,l*m,ny)
+  md = max(maximum(na), maximum(nb)-1)
+  l = nu+ny
+  Θ::Matrix{T} = zeros(T,sum(nb)+sum(na),ny)
+#  thetam::Matrix{T} = zeros(T,l*m,ny)
   # Compute efficiently for order m
-  for iy = 1:ny
-    m = max(maximum(na[iy,:]), maximum(nb[iy,:]))
-    md = max(maximum(na[iy,:]), maximum(nb[iy,:]+nk[iy,:]-ones(similar(nk))), m)
-    if method.ic == :truncate
-      col, row, Y = _fill_truncate_ic(data, md, m, iy, na, nb, nk)
-    elseif method.ic == :zero
-      col, row, Y = _fill_zero_ic(data, md, m, iy, na, nb, nk)
-    end
-    thetam[:,iy] = _ls_toeplitz(col, row, Y)
+
+  if method.ic == :truncate
+    Φ, Y = _fill_truncate_ic(datat, md, m, feedthrough=feedthrough)
+  elseif method.ic == :zero
+    Φ, Y = _fill_zero_ic(datat, md, m, feedthrough=feedthrough)
+  end
+  Θ = _ls_toeplitz(Φ, Y)
+  mse = _mse(Θ, Φ, Y)
+
+  # get Θ in the form Θ = [I A₁ᵀ A₂ᵀ… B₁ᵀ B₂ᵀ …]ᵀ
+  Θᵣ = zeros(T, (nb+na+1)*ny,ny)
+  Θᵣ[1:ny,1:ny] = eye(T,ny)
+  for k = 1:na
+    idx = (k-1)*2ny+(1:ny)
+    Θᵣ[(k-1)*2ny+ny+(1:ny),:] = Θ[idx,:]
+  end
+  for k = 1:nb
+    idx = (k-1)*2ny+(1:ny) + ny
+    Θᵣ[(k-1)*2ny+2ny+(1:ny),:] = Θ[idx,:]
   end
 
   # /TODO simulation and prediction for MIMO ARX
-  return thetam
+  return Θᵣ, mse
+end
+
+function _mse{T}(Θ::AbstractMatrix{T}, Φ::AbstractMatrix{T},
+  Y::AbstractMatrix{T})
+  return reshape(sumabs2(Φ*Θ-Y,1)/size(Y,1),size(Y,2))
 end
 
 # Auxilliary methods
 
-function _ls_toeplitz{V<:AbstractVector,M<:AbstractMatrix}(col::M, row::M, Y::V)
-  γ = norm(col)
-  row /= γ
-  col /= γ  # 5γ
-  Y   /= γ
-
-  T = full(Toeplitz(col,row))
-  Q,R = qr(T)
+function _ls_toeplitz{M1<:BlockToeplitz,M2<:AbstractArray}(Φ::M1, Y::M2)
+  Q,R = qr(full(Φ))
   return R\(Q.'*Y)
-#  return lstoeplitz(col, row, Y)[1]
-#  Q,R =  qrtoeplitz(col, row)
+#  return lstoeplitz(Φ, Y)[1]
+#  Q,R =  qrtoeplitz(Φ)
 #  return R\(Q.'*Y)
 end
 
-function _fill_truncate_ic{T<:Real, V1<:AbstractVector, V2<:AbstractVector}(
-    data::IdDataObject{T,V1,V2}, md::Int, m::Int, n::Vector{Int},
-    feedthrough::Bool=false)
-  na,nb,nk = n
-  y,u      = data.y, data.u
-  ny       = data.ny
-  nu       = data.nu
-  N        = size(y,1)
-  l        = nu+ny
+function _fill_truncate_ic{T<:Real,M1<:AbstractArray,M2<:AbstractArray}(
+  data::IdDataObject{T,M1,M2}, md::Int, m::Int; feedthrough::Bool=false)
+  y,u = data.y, data.u
+  ny  = data.ny
+  nu  = data.nu
 
-  Y   = feedthrough ? y[md+1:N] - u[md+1:N] :
-                      y[md+1:N]
+  l   = nu+ny
+
+  Y   = feedthrough ? y[md+1:end,:] - u[md+1:end,:] :
+                      y[md+1:end,:]
   # trim away delay in u and corresponding elements in y
-  ywd = y[md-m+1:N-1]
-  uwd = u[md+1-m-(nk-1):N-nk]
-
-  # fill row and col
-  col = hcat(-ywd[m:end], uwd[m:end])
-  row = zeros(T,1,l*m)
-  for i = 1:m
-    idx = m+1-i
-    row[1,(i-1)*l+1:i*l] = hcat(-ywd[idx], uwd[idx])
-  end
-  return col, row, Y
-end
-
-function _fill_zero_ic{T<:Real, V1<:AbstractVector, V2<:AbstractVector}(
-    data::IdDataObject{T,V1,V2}, md::Int, m::Int, n::Vector{Int},
-    feedthrough::Bool=false)
-  na,nb,nk = n
-  y,u      = data.y, data.u
-  ny       = data.ny
-  nu       = data.nu
-  N        = size(y,1)
-  l        = 2
-
-  Y = feedthrough ? y - u :
-                    y
-  # add zero elements in u
-  if nk > 0
-    ywd = reshape(y[1:end-1],N-1,1)
-    uwd = vcat(zeros(T, nk-1,1), reshape(u[1:end-nk],N-1,1))
-    Y = Y[2:end]
-  else
-    ywd = vcat(zeros(T,1,1), reshape(y[1:end-1],N-1,1))
-    uwd = reshape(u[1:end-nk],N-1,1)
-  end
-
-  # fill col and row
-  col = hcat(-ywd, uwd)
-  row = hcat(col[1:1,1:l], zeros(T,1,(m-1)*l))
-  return col, row, Y
-end
-
-function _fill_truncate_ic{M<:AbstractMatrix}(y::M,u::M,md::Int,m::Int,iy::Int,
-    na::Matrix{Int},nb::Matrix{Int},nk::Matrix{Int})
-  T  = eltype(y)
-  N  = size(y,1)
-  ny = size(y,2)
-  nu = size(u,2)
-  l  = nu+ny
-
-  Y   = y[md+1:N,iy][:]
-  # trim away delay in u and correspond elements in y
-  ywd = y[md-m+1:N-1,:]
-  uwd = zeros(T,N-md+m-1,nu)
-  for iu = 1:nu
-    nkiu = nk[iy,iu]
-    println( length(u[md+1-m-(nkiu-1):N-nkiu,iu] ))
-    uwd[:,iu] = u[md+1-m-(nkiu-1):N-nkiu,iu]
-  end
+  ywd = y[md-m+1:end-1,:]
+  uwd = u[md-m+1:end-1,:]
 
   # fill row and col
   col = hcat(-ywd[m:end,:], uwd[m:end,:])
   row = zeros(T,1,l*m)
   for i = 1:m
     idx = m+1-i
-    row[1,(i-1)*l+1:i*l] = hcat(-ywd[idx,:], uwd[idx,:])
+    row[1,(i-1)*l+1:i*l-nu] = -ywd[idx,:]
+    row[1,(i-1)*l+ny+1:i*l] =  uwd[idx,:]
   end
-  return col, row, Y
+
+  _normalize_col_row_Y!(col,row,Y)
+  Φ = Toeplitz(col,row)
+  return Φ, Y
 end
 
-function _fill_zero_ic{M<:AbstractMatrix}(y::M,u::M,md::Int,m::Int,iy::Int,
-    na::Matrix{Int},nb::Matrix{Int},nk::Matrix{Int})
-  T  = eltype(y)
-  N  = size(y,1)
-  ny = size(y,2)
-  nu = size(u,2)
-  l  = nu+ny
+function _fill_zero_ic{T<:Real,M1<:AbstractArray,M2<:AbstractArray}(
+  data::IdDataObject{T,M1,M2}, md::Int, m::Int; feedthrough::Bool=false)
+  y,u = data.y, data.u
+  ny  = data.ny
+  nu  = data.nu
+  l   = nu+ny
 
-  Y   = y[1:end,iy][:]
-  # add zero elements in y and u
-  uwd = zeros(T,N,nu)
-  ywd = vcat(zeros(T, ny,1), y[1:end-1,:])
-  for iu = 1:nu
-    nkiu = nk[iy,iu]
-    uwd[:,iu] = vcat(zeros(T, nkiu,1), u[1:end-nkiu,iu])
-  end
+  Y   = feedthrough ? y[2:end,:] - u[2:end,:] :
+                      y[2:end,:]
+  ywd = y[1:end-1,:]
+  uwd = u[1:end-1,:]
 
   # fill col and row
-  col = hcat(-ywd[:,:], uwd[:,:])
-  row = hcat(col[1,1:l], zeros(T,1,(m-1)*l))
-  return col, row, Y
+  col = hcat(-ywd, uwd)
+  row = hcat(col[1:1,1:l], zeros(T,1,(m-1)*l))
+
+  _normalize_col_row_Y!(col,row,Y)
+  Φ = Toeplitz(col,row)
+  return Φ, Y
+end
+
+function _normalize_col_row_Y!{M1<:AbstractMatrix,M2<:AbstractMatrix}(
+  col::M1, row::M1, Y::M2)
+  γ = norm(col)
+  row /= γ
+  col /= γ  # 5γ
+  Y   /= γ
 end

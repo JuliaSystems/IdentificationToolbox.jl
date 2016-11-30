@@ -1,6 +1,6 @@
 type IdDSs{T<:Real, M1<:AbstractMatrix{T}, M2<:AbstractMatrix{T},
     M3<:AbstractMatrix{T}, M4<:AbstractMatrix{T}, M5<:AbstractMatrix{T},
-    M6<:AbstractMatrix{T}, S<:IdInfo} <: ControlCore.MimoSystem
+    M6<:AbstractMatrix{T}, S<:IdInfo} <: ControlCore.LtiSystem
     A::M1
     B::M2
     C::M3

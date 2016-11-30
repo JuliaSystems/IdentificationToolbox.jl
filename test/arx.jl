@@ -25,7 +25,7 @@ y = filt(B,A,u) + filt(1,A,e)
 data = iddata(y,u)
 
 # test user methods
-S = Array(IdDSisoRational,0)
+S = Array(IdMFD,0)
 
 # arx constructor
 push!(S, arx(data, n))
@@ -41,3 +41,20 @@ push!(S, pem(data, n, ARX(ic = :zero)))
 for system in S
   @test abs(system.info.mse-lambda) < 0.3*lambda
 end
+
+
+u1 = randn(N)
+u2 = randn(N)
+lambda = 0.1
+e1 = sqrt(lambda)*randn(N)
+e2 = sqrt(lambda)*randn(N)
+y1 = filt(B,A,u1) + filt(B,A,u2) + filt(1,A,e1)
+y2 = filt(B,A,u1) + filt(B,A,u2) + filt(1,A,e2)
+
+data2 = iddata(hcat(y1,y2), hcat(u1,u2))
+
+push!(S, arx(data2, na, nb, [1, 1]))
+
+_arx(data2, na, nb, [1, 1])
+
+typeof(S[3].A)
