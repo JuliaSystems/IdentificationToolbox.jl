@@ -1,16 +1,14 @@
 abstract IdInfo
 
-immutable IterativeIdInfo{T<:IterativeIdMethod} <: IdInfo
-  mse::Float64
-  modelfit::Float64
-  opt::Optim.OptimizationResults
-  method::T
-  n::Vector{Int}
-end
-
-immutable OneStepIdInfo{T<:OneStepIdMethod} <: IdInfo
+immutable IterativeIdInfo <: IdInfo #{T<:IterativeIdMethod}
   mse::Vector{Float64}
   modelfit::Vector{Float64}
-  method::T
-  n::Vector{Int}
+  opt::Optim.OptimizationResults
+  model::IdModel
+end
+
+immutable OneStepIdInfo <: IdInfo #{T<:OneStepIdMethod}
+  mse::Vector{Float64}
+  modelfit::Vector{Float64}
+  model::IdModel
 end

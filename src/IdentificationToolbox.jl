@@ -26,6 +26,8 @@ export
   morsm,  MORSM,
   pem,
   # method functions
+  mse,
+  modelfit,
   cost,
   predict,
   fitmodel
@@ -34,13 +36,16 @@ using Polynomials, Optim, PolynomialMatrices, ControlCore, ToeplitzMatrices,
   GeneralizedSchurAlgorithm, Compat
 
 typealias PolyMatrix PolynomialMatrices.PolyMatrix
+typealias Poly Polynomials.Poly
 
 # types
 include("types/iddata.jl")
+include("types/idmodels.jl")
 include("types/idmethods.jl")
 include("types/idinfo.jl")
 include("types/idmfd.jl")
 include("types/iddss.jl")
+
 
 # utilities
 include("utilities/filt.jl")
@@ -49,8 +54,8 @@ include("utilities/detrend.jl")
 include("utilities/compare.jl")
 
 # methods
-#include("methods/pem.jl")
-#include("methods/armax.jl")
+include("methods/pem.jl")
+include("methods/armax.jl")
 #include("methods/bj.jl")
 include("methods/oe.jl")
 #include("methods/arx.jl")

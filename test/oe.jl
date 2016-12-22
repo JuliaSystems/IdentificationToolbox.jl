@@ -45,65 +45,98 @@ for system in S
 end
 
 
-b = [0.1, 0.3, 0.2]
-f = [0.5, 0.11, 0.05]
+b = [0.3]
+f = [0.5]
 
 B = [0;b]
 F = [1;f]
 
-N = 1000
+nb = nf = 1
+
+N = 2000
 u1 = randn(N)
 u2 = randn(N)
-lambda = 0.1
+lambda = 1
 e1 = sqrt(lambda)*randn(N)
 e2 = sqrt(lambda)*randn(N)
-y1 = filt(B,F,u1) + filt(B,F,u2) + e1
-y2 = filt(B,F,u1) + filt(B,F,u2) + e2
+y1 = filt(B,F,u1) + 0*filt(zeros(nb),F,u2) + e1
+y2 = 0*filt(zeros(nb),F,u1) + filt(B,F,u2) + e2
 
 u = hcat(u1,u2)
-y = hcat(y1,y2)
+y = y1 #hcat(y1)
 data2 = iddata(y, u)
 
-model = OE(2,2,[1,1])
-
-ny = 2
+ny = 1
 nu = 2
-@time y_est = predict(data2,model,zeros((2+2)*ny*nu))
-cost(data2,model,zeros((2+2)*ny*nu))
-y_est
-sumabs2(y - y_est)
 
-data2.y
+model = OE(nb,nf,[1,1],ny,nu)
+orders(model)
 
-model.orders.nf
-reshape(randn(16),8,2)
+m = nf*ny^2+nb*nu*ny
+randn(m)
 
-@time begin
-  Bm = vcat(zeros(2,2),randn(6,2))
-  Fm = vcat(eye(2),randn(6,2))
-  _filt_iir!(out, Bm, Fm, u, rand(2,2))
-end
+cost(data2, model, randn(m))
+_mse(data2, model, randn(m))
 
-@time begin
-  Pb = PolyMatrix(vcat(zeros(2,2),randn(6,2)), (2,2))
-  Pf = PolyMatrix(vcat(eye(2),randn(6,2)),(2,2))
-  _filt_iir!(out, Pb, Pf, u, rand(2,2))
-end
-
-_zerosi(Pb,Pf,Float64)
-
-out = zeros(N,2)
-_filt_fir!(out, Pb, u, rand(2,2))
-out
+psi = psit(data2, model, randn(m))
 
 
-Array(Float64, size(Pf,1),size(Pb,2))
+x0 = vcat(b[1]*ones(nu,ny), f[1]*eye(ny))[:]
 
-@which filt(Pb,Pf,randn(100,2))
+bp,fp = _getoepolys(model, x0)
 
-insert!(Pf, 4, randn(2,2))
+x0[2] = 0.5
 
-Pf
-filt(Pb,Pf,randn(100,2))
+@time sys = pem(data2, model, x0+0.05*randn(m))
+sys.B
+sys.F
+sys.info.opt
 
-size(Pf,2)
+k = length(x0) # number of parameters
+last_x  = zeros(Float64,k)
+last_V  = -ones(Float64,1)
+storage = zeros(k, k+1)
+g = x0
+gradhessian!(data2, model, x0, last_x, last_V, storage)
+g = storage[:,end]
+H = storage[:,1:end-1]
+H\g
+x = x0-0.0001*(H\g)
+
+gradhessian!(data2, model, x, last_x, last_V, storage)
+g = storage[:,end]
+H = storage[:,1:end-1]+eye(k)*0.0001
+x = x-0.1*(H\g)
+
+@time y_est = predict(data2, model, x0)
+predict(data2, model, x0)
+
+ap,bp,fp,cp,dp = _getpolys(model, vcat(b,f))
+filt(bp,fp,u)
+filt(B,F,u)
+
+y1
+sumabs2(y-y_est)/N
+
+cost(data2, model, x)
+cost(data2, model, x0)
+
+coeffs(one_size_f)[0]
+coeffs(f)
+filt(one_size_f,f,u)
+
+
+bp = PolyMatrix(hcat(B), (1,1))
+fp = PolyMatrix(hcat(F), (1,1))
+
+
+model = ARMAX(1,1,1,1,ny,nu)
+orders(model)
+x0 = vcat(f[1]*ones(nu,ny), b[1]*eye(ny), 0.1*eye(ny))[:]
+m = length(x0)
+
+@time sys = pem(data2, model, x0+0.05*randn(m))
+sys.A
+sys.B
+sys.C
+sys.info.opt

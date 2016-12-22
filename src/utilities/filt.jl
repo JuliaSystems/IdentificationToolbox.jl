@@ -78,12 +78,12 @@ function filt!{M<:AbstractArray,T,S,N}(
 end
 
 function _zerosi{S,G}(b::PolyMatrix{S}, a::PolyMatrix{G}, T)
-  m  = max(order(a), order(b)) - 1
+  m  = max(order(a), order(b))
   si = zeros(promote_type(S, G, T), m, size(a,1))
 end
 
 function filt{T,S,G}(b::PolyMatrix{T}, a::PolyMatrix{S},
-  x::AbstractMatrix{G}, si=_zerosi(b, a, G))
+  x::AbstractArray{G}, si=_zerosi(b, a, G))
   filt!(Array(promote_type(T, G, S), size(x,1),size(a,2)), b, a, x, si)
 end
 
@@ -92,27 +92,25 @@ function filt!{H,T,S,G}(out::AbstractArray{H}, b::PolyMatrix{T},
 
   #TODO
   # get filters to the same length
-  println(order(b))
-  println(order(a))
 
   _filt_iir!(out, b, a, x, si)
   return out
 end
 
-function _filt_iir!{T,S}(
+function _filt_iir!{T}(
   out::AbstractMatrix{T}, b::PolyMatrix{T}, a::PolyMatrix{T},
-  x::AbstractArray{T}, si::AbstractMatrix{S})
+  x, si)
   silen = size(si,1)
   bc = coeffs(b)
   ac = coeffs(a)
   val = zeros(T,1,size(a,2))
   @inbounds @simd for i=1:size(x, 1)
     xi = view(x,i,:)
-    val = si[1,:] + bc[1]*xi
+    val = si[1,:] + bc[0]*xi
     for j=1:(silen-1)
-       si[j,:] = si[j+1,:,] + bc[j+1]*xi - ac[j+1]*val
+       si[j,:] = si[j+1,:,] + bc[j]*xi - ac[j]*val
     end
-    si[silen,:] = bc[silen+1]*xi - ac[silen+1]*val
+    si[silen,:] = bc[silen]*xi - ac[silen]*val
     out[i,:] = val
   end
 end
@@ -121,14 +119,70 @@ function _filt_fir!{T,S}(
   out::AbstractMatrix{T}, b::PolyMatrix{T},
   x::AbstractArray{T}, si::AbstractMatrix{S})
   silen = size(si,1)
-    bc = coeffs(b)
+  bc = coeffs(b)
   @inbounds @simd for i=1:size(x, 1)
     xi = view(x,i,:)
-    val = si[1,:] + bc[1]*xi
+    val = si[1,:] + bc[0]*xi
     for j=1:(silen-1)
-      si[j,:] = si[j+1,:] + bc[j+1]*xi
+      si[j,:] = si[j+1,:] + bc[j]*xi
     end
-    si[silen,:] = bc[silen+1]*xi
+    si[silen,:] = bc[silen]*xi
+    out[i,:] = val
+  end
+end
+
+# polynomial filtering
+function filt{T,S,G}(b::Poly{T}, a::Poly{S},
+  x::AbstractVector{G}, si=zeros(promote_type(S, G, T), length(coeffs(a))-1))
+  return filt(reverse(coeffs(b)), reverse(coeffs(a)), x, si)
+end
+
+function filt{T,S,G}(b::T, a::Poly{S},
+  x::AbstractVector{G}, si=zeros(promote_type(S, G, T), length(coeffs(a))-1))
+  out = Array(promote_type(T, G, S), size(x,1))
+  _filt_ar!(out, a/b, x, si)
+  return out
+end
+
+function _filt_ar!{T,S}(
+  out::AbstractVector{T}, a::Poly{T},
+  x::AbstractArray{T}, si::AbstractVector{S})
+  silen = size(si,1)
+  println(si)
+  ac = reverse(coeffs(a))
+  println(ac)
+  val = zero(T)
+  @inbounds @simd for i=1:size(x, 1)
+    xi = x[i]
+    val = si[1] + xi
+    for j=1:(silen-1)
+       si[j,:] = si[j+1,:,] - ac[j+1]*val
+    end
+    si[silen] = - ac[silen+1]*val
+    out[i] = val
+  end
+end
+
+function filt{T,S,G}(b::T, a::PolyMatrix{S},
+  x::AbstractArray{G}, si=zeros(promote_type(S, G, T), order(a), size(a,1)))
+  out = Array(promote_type(T, G, S), size(x,1), size(x,2))
+  _filt_ar!(out, a, x, si)  # TODO should be a/b
+  return out
+end
+
+function _filt_ar!{T,S}(
+  out::AbstractMatrix{T}, a::PolyMatrix{T},
+  x::AbstractArray{T}, si::AbstractMatrix{S})
+  silen = size(si,1)
+  ac = coeffs(a)
+  val = zeros(T,1,size(a,2))
+  @inbounds @simd for i=1:size(x, 1)
+    xi = view(x,i,:)
+    val = si[1,:] + xi
+    for j=1:(silen-1)
+       si[j,:] = si[j+1,:,] - ac[j]*val
+    end
+    si[silen,:] = - ac[silen]*val
     out[i,:] = val
   end
 end
