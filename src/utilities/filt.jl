@@ -90,16 +90,55 @@ end
 function filt!{H,T,S,G}(out::AbstractArray{H}, b::PolyMatrix{T},
   a::PolyMatrix{S}, x::AbstractArray{G}, si=_zerosi(b, a, G))
 
-  #TODO
-  # get filters to the same length
+  as = order(a)
+  bs = order(b)
+  sz = max(as, bs)
+  if as == 0
+    if bs == 0
+      # simple scaling
+      out = x*(coeffs(a)[0]\coeffs(b)[0]).'
+    else
+     _filt_fir!(out, b, x, si)
+   end
+   return out
+  end
+  sz = max(as, bs)
+  silen = sz
+  if size(si, 1) != silen
+      throw(ArgumentError("initial state vector si must have max(length(a),length(b))-1 columns"))
+  end
+
+  # # Filter coefficient normalization TODO
+  # for i = 1:size(a[1],1)
+  #   if a[1][i,i] != 1
+  #     norml = a[1][i,i]
+  #     for k = 1:length(a), j = 1:size(a[1],2)
+  #       a[k][i,j] ./= norml
+  #     end
+  #     for k = 1:length(b), j = 1:size(b[1],2)
+  #       b[k][i,j] ./= norml
+  #     end
+  #   end
+  # end
+
+  # Pad the coefficients with zeros if needed
+  if bs < sz
+    for i = bs+1:sz
+      b[i] = zeros(similar(b[1]))
+    end
+  end
+  if 0 < as < sz
+    for i = as+1:sz
+      a[i] = zeros(similar(a[1]))
+    end
+  end
 
   _filt_iir!(out, b, a, x, si)
   return out
 end
 
-function _filt_iir!{T}(
-  out::AbstractMatrix{T}, b::PolyMatrix{T}, a::PolyMatrix{T},
-  x, si)
+function _filt_iir!{T}(out::AbstractMatrix{T}, b::PolyMatrix{T},
+  a::PolyMatrix{T}, x, si)
   silen = size(si,1)
   bc = coeffs(b)
   ac = coeffs(a)
@@ -115,9 +154,8 @@ function _filt_iir!{T}(
   end
 end
 
-function _filt_fir!{T,S}(
-  out::AbstractMatrix{T}, b::PolyMatrix{T},
-  x::AbstractArray{T}, si::AbstractMatrix{S})
+function _filt_fir!{T}(
+  out::AbstractMatrix{T}, b::PolyMatrix{T}, x, si)
   silen = size(si,1)
   bc = coeffs(b)
   @inbounds @simd for i=1:size(x, 1)

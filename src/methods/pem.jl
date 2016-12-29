@@ -1,19 +1,22 @@
-function cost{T<:Real,S<:PolynomialModel}(
-  data::IdDataObject{T}, model::S, x, last_x, last_V, storage)
-  cost(data, model, x)
+function cost{T<:Real,S<:PolynomialModel, O}(
+  data::IdDataObject{T}, model::S, x, last_x, last_V, storage,
+  options::IdOptions{O}=IdOptions())
+  cost(data, model, x, options)
 end
 
-function g!{T1<:Real, S<:PolynomialModel, T2<:Real}(
+function g!{T1<:Real, S<:PolynomialModel, T2<:Real, O}(
     data::IdDataObject{T1}, model::S, x::Vector{T2},
-    last_x::Vector{T2}, last_V::Vector{T2}, g, storage::Matrix{T2})
-  gradhessian!(data, model, x, last_x, last_V, storage)
+    last_x::Vector{T2}, last_V::Vector{T2}, g, storage::Matrix{T2},
+    options::IdOptions{O}=IdOptions())
+  gradhessian!(data, model, x, last_x, last_V, storage, options)
   copy!(g, storage[:, end])
 end
 
-function h!{T1<:Real, S<:PolynomialModel, T2<:Real}(
+function h!{T1<:Real, S<:PolynomialModel, T2<:Real, O}(
     data::IdDataObject{T1}, model::S, x::Vector{T2},
-    last_x::Vector{T2}, last_V::Vector{T2}, H, storage::Matrix{T2})
-  gradhessian!(data, model, x, last_x, last_V, storage)
+    last_x::Vector{T2}, last_V::Vector{T2}, H, storage::Matrix{T2},
+    options::IdOptions{O}=IdOptions())
+  gradhessian!(data, model, x, last_x, last_V, storage, options)
   copy!(H, storage[:,1:end-1])
 end
 
@@ -37,23 +40,23 @@ function pem{M1<:IterativeIdMethod, M2<:OneStepIdMethod, T1<:Real}(
 end
 
 function pem{S<:PolynomialModel, T1<:Real, T2<:Real}(
-    data::IdDataObject{T1}, model::S, x0::AbstractVector{T2})
+    data::IdDataObject{T1}, model::S, x0::AbstractVector{T2}; options::IdOptions=IdOptions())
 
   k = length(x0) # number of parameters
   last_x  = ones(T2,k)
   last_V  = -ones(T2,1)
-  autodiff = false
+
 
   opt::Optim.OptimizationResults
-  if !autodiff
+  if !options.OptimizationOptions.autodiff
     storage = zeros(k, k+1)
-    df = TwiceDifferentiableFunction(x    -> cost(data, model, x, last_x, last_V, storage),
-    (x,g) -> g!(data, model, x, last_x, last_V, g, storage),
-    (x,H) -> h!(data, model, x, last_x, last_V, H, storage))
-    opt = optimize(df, x0, Newton(), OptimizationOptions(g_tol = 1e-16,f_tol=1e-128))
+    df = TwiceDifferentiableFunction(x    -> cost(data, model, x, options),
+    (x,g) -> g!(data, model, x, last_x, last_V, g, storage, options),
+    (x,H) -> h!(data, model, x, last_x, last_V, H, storage, options))
+    opt = optimize(df, x0, Newton(), options.OptimizationOptions)
   else
-    opt = optimize(x->cost(data, model, x, last_x, last_V, storage),
-          x0, Newton(), OptimizationOptions(autodiff = true, g_tol = 1e-16))
+    opt = optimize(x->cost(data, model, x, options),
+          x0, Newton(), options.OptimizationOptions)
   end
 
   println(fieldnames(opt))
@@ -62,7 +65,8 @@ function pem{S<:PolynomialModel, T1<:Real, T2<:Real}(
   println(mse)
   println(modelfit)
   idinfo    = IterativeIdInfo(mse, modelfit, opt, model)
-  A,B,F,C,D = _getpolys(model, opt.minimizer)
+  Θₚ,icbf,icdc,iccda = _split_params(model, opt.minimizer, IdOptions())
+  A,B,F,C,D = _getpolys(model, Θₚ)
 
   IdMFD(A,B,F,C,D,data.Ts,idinfo)
 end
@@ -162,26 +166,65 @@ end
 #   #est(y,u,b,f,nk,ic)
 # end
 
+function predict{T1,V1,V2,S,M,O}(data::IdDataObject{T1,V1,V2},
+  model::PolynomialModel{S,M}, Θ, options::IdOptions{O}=IdOptions())
+  Θₚ,icbf,icdc,iccda = _split_params(model, Θ, options)
+  a,b,f,c,d          = _getpolys(model, Θₚ)
+  na,nb,nf,nc,nd,nk  = orders(model)
+
+  ny   = data.ny
+  nbf  = max(nb, nf)
+  ndc  = max(nd, nc)
+  ncda = max(nc, nd+na)
+
+  # save unnecessary computations
+  temp  = nbf > 0 ? filt(b, f, data.u, icbf) : data.u
+  temp2 = ndc > 0 ? filt(d, c, temp, icdc) : temp
+  temp3 = ncda > 0 ? temp2 + filt(c-d*a, c, data.y, iccda) : temp2
+  return temp3 # 10.53 [Ljung1999]
+end
+
+function _split_params{S,M,O}(model::PolynomialModel{S,M}, Θ, options::IdOptions{O})
+  na,nb,nf,nc,nd,nk = orders(model)
+
+  ny   = model.ny
+  nbf  = max(nb, nf)
+  ndc  = max(nd, nc)
+  ncda = max(nc, nd+na)
+  m  = ny^2*(na+nf+nc*nd)+nu*ny*nb
+  mi = (ndc+nbf+ncda)*ny
+
+  Θₚ = Θ[1:m]
+  Θᵢ = options.estimate_initial ? Θ[m+1:m+mi] : zeros(mi)
+  icbf  = nbf > 0  ? reshape(Θᵢ[1:nbf*ny], nbf, ny)                  : zeros(0,0)
+  icdc  = ndc > 0  ? reshape(Θᵢ[nbf*ny+(1:ndc*ny)], nbf, ny)         : zeros(0,0)
+  iccda = ncda > 0 ? reshape(Θᵢ[(nbf+ndc)*ny+(1:ncda*ny)], nbf, ny) : zeros(0,0)
+  return Θₚ, icbf, icdc, iccda
+end
+
 # calculate the value function V. Used for automatic differentiation
-function cost{T<:Real,S<:PolynomialModel}(data::IdDataObject{T}, model::S, x)
+function cost{T<:Real,S<:PolynomialModel,O}(data::IdDataObject{T}, model::S, x,
+    options::IdOptions{O}=IdOptions())
   y     = data.y
   N     = size(y,1)
-  y_est = predict(data, model, x)
+  y_est = predict(data, model, x, options)
 
   # if ic == :truncate
   #   #TODO proper m
   #   m = 0
   #   return sumabs2(y-y_est)/(N-m)
   # end
-  return cost(y, y_est, N)
+  return cost(y, y_est, N, options)
 end
 
-cost{T}(y::AbstractArray{T}, y_est, N::Int) = sumabs2(y-y_est)/N
+cost{T}(y::AbstractArray{T}, y_est, N::Int, options::IdOptions) =
+  sumvalue(options.loss_function, y, y_est)/N
+#sumabs2(y-y_est)/N
 
 # Returns the value function V and saves the gradient/hessian in `storage` as storage = [H g].
-function gradhessian!{T<:Real, T2<:Real, S<:PolynomialModel}(
+function gradhessian!{T<:Real, T2<:Real, S<:PolynomialModel, O}(
     data::IdDataObject{T}, model::S, x::Vector{T2},
-    last_x::Vector{T2}, last_V::Vector{T2}, storage::Matrix{T2})
+    last_x::Vector{T2}, last_V::Vector{T2}, storage::Matrix{T2}, options::IdOptions{O}=IdOptions())
   # check if this is a new point
   if x != last_x
     # update last_x
@@ -192,9 +235,9 @@ function gradhessian!{T<:Real, T2<:Real, S<:PolynomialModel}(
     N  = size(y,1)
 
     Psit  = psit(data, model, x)  # Psi the same for all outputs
-    y_est = predict(data, model, x)
+    y_est = predict(data, model, x, options)
     eps   = y - y_est
-    V     = cost(y, y_est, N)
+    V     = cost(y, y_est, N, options)
 
     k = size(Psit,2)
 
@@ -204,7 +247,7 @@ function gradhessian!{T<:Real, T2<:Real, S<:PolynomialModel}(
     A_mul_B!(H,  Psit.', Psit)          # H = Psi*Psi.'
     for i = 0:ny-1
       A_mul_B!(gt, -eps[:,i+1].', Psit)   # g = -Psi*eps
-      storage[i*k+(1:k), ny*k+1]    = gt.'/N
+      storage[i*k+(1:k), ny*k+1]    = 2*gt.'/N
       storage[i*k+(1:k), i*k+(1:k)] = H/N
     end
 

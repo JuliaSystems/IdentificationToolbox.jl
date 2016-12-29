@@ -33,7 +33,7 @@ export
   fitmodel
 
 using Polynomials, Optim, PolynomialMatrices, ControlCore, ToeplitzMatrices,
-  GeneralizedSchurAlgorithm, Compat
+  GeneralizedSchurAlgorithm, Compat, LossFunctions
 
 typealias PolyMatrix PolynomialMatrices.PolyMatrix
 typealias Poly Polynomials.Poly
@@ -45,7 +45,7 @@ include("types/idmethods.jl")
 include("types/idinfo.jl")
 include("types/idmfd.jl")
 include("types/iddss.jl")
-
+include("types/options.jl")
 
 # utilities
 include("utilities/filt.jl")
@@ -56,10 +56,10 @@ include("utilities/compare.jl")
 # methods
 include("methods/pem.jl")
 include("methods/armax.jl")
-#include("methods/bj.jl")
+include("methods/bj.jl")
 include("methods/oe.jl")
 #include("methods/arx.jl")
-#include("methods/fir.jl")
+include("methods/fir.jl")
 #include("methods/stmcb.jl")
 #include("methods/morsm.jl")
 #include("methods/n4sid.jl")
