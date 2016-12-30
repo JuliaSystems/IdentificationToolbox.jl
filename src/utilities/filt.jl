@@ -137,8 +137,8 @@ function filt!{H,T,S,G}(out::AbstractArray{H}, b::PolyMatrix{T},
   return out
 end
 
-function _filt_iir!{T}(out::AbstractMatrix{T}, b::PolyMatrix{T},
-  a::PolyMatrix{T}, x, si)
+function _filt_iir!{T,S,G}(out::AbstractArray{T}, b::PolyMatrix{T},
+  a::PolyMatrix{T}, x::AbstractArray{S}, si::AbstractArray{G})
   silen = size(si,1)
   bc = coeffs(b)
   ac = coeffs(a)

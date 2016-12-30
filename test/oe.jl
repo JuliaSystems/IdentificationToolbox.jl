@@ -45,7 +45,7 @@ for system in S
 end
 
 
-b = [0.3,0.8, 0.4]
+b = [0.3, 0.8, 0.4]
 f = [0.5, 0.2, 0.05]
 
 B = [0;b]
@@ -53,55 +53,68 @@ F = [1;f]
 
 nb = nf = 3
 
-N = 1000
+N = 2000
 u1 = randn(N)
 u2 = randn(N)
 lambda = 1
 e1 = sqrt(lambda)*randn(N)
 e2 = sqrt(lambda)*randn(N)
-y1 = filt(B,F,u1) + 0*filt(zeros(nb),F,u2) + e1
+y1 = filt(B,F,u1) + filt(B,F,u2) + e1
 y2 = 0*filt(zeros(nb),F,u1) + filt(B,F,u2) + e2
 
-u = hcat(u1,u2)
-y = hcat(y1,y2)
+u = hcat(u1)
+y = hcat(y1)
 data2 = iddata(y, u)
 
-ny = 2
-nu = 2
+ny = 1
+nu = 1
 
-model = OE(nb,nf,[1,1],ny,nu)
+model = OE(nb,nf,1,ny,nu)
 orders(model)
 
 m = nf*ny^2+nb*nu*ny
 randn(m)
-m0 = (nb+nf)*ny
+m0 = max(nb,nf)*ny
 
 cost(data2, model, randn(m+m0))
 _mse(data2, model, randn(m+m0))
 
 psi = psit(data2, model, randn(m+m0))
-
+orders(model)
 
 x0 = vcat(b[1]*ones(nu,ny), f[1]*eye(ny))[:]
-x0 = vcat(b[1]*eye(ny), b[2]*eye(ny), b[3]*eye(ny), f[1]*eye(ny), f[2]*eye(ny), f[3]*eye(ny))[:]
+x0 = vcat(b[1]*ones(nu,ny), b[2]*ones(nu,ny), b[3]*ones(nu,ny), f[1]*eye(ny), f[2]*eye(ny), f[3]*eye(ny))[:]
 
 bp,fp = _getpolys(model, x0)
 
 x0[2] = 0.01
-x0 = vcat(x0,zeros(m0))
+#x0 = vcat(x0,zeros(m0))
 
-options = IdOptions(iterations = 100, loss_function = HuberLoss(2), show_trace=true)
-@time sys = pem(data2, model, x0, options=options) # , IdOptions(f_tol = 1e-32)
+cost(data2, model, x0, options)
+
+options = IdOptions(extended_trace=true, iterations = 100, loss_function = L2DistLoss(), autodiff=false, show_trace=true, estimate_initial=false)
+@time sys = pem(data2, model, x0 + 0.001*randn(length(x0)), options=options) # , IdOptions(f_tol = 1e-32)
 sys.B
 sys.F
 sys.info.opt
+fieldnames(sys.info.opt.trace[1].metadata)
+sys.info.opt.trace[1]
+
+sys.info.opt.trace[1].metadata.vals
+
+options.estimate_initial
+
+df = TwiceDifferentiableFunction(x->cost(data2, model, x0, options))
+stor = zeros(2m,2m)
+a = df.h!(x0,stor)
+df
 
 k = length(x0) # number of parameters
 last_x  = zeros(Float64,k)
 last_V  = -ones(Float64,1)
 storage = zeros(k, k+1)
 g = x0
-gradhessian!(data2, model, x0, last_x, last_V, storage)
+@time gradhessian!(data2, model, x0, last_x, last_V, storage, options)
 g = storage[:,end]
 H = storage[:,1:end-1]
 H\g

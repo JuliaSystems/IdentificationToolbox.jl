@@ -30,10 +30,15 @@ export
   modelfit,
   cost,
   predict,
-  fitmodel
+  fitmodel,
+  iddata,
+  IdOptions
 
 using Polynomials, Optim, PolynomialMatrices, ControlCore, ToeplitzMatrices,
-  GeneralizedSchurAlgorithm, Compat, LossFunctions
+  GeneralizedSchurAlgorithm, Compat
+
+using Reexport
+@reexport using LossFunctions
 
 typealias PolyMatrix PolynomialMatrices.PolyMatrix
 typealias Poly Polynomials.Poly

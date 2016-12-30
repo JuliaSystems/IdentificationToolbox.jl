@@ -39,8 +39,8 @@ function pem{M1<:IterativeIdMethod, M2<:OneStepIdMethod, T1<:Real}(
   pem(data, n, x0, method)
 end
 
-function pem{S<:PolynomialModel, T1<:Real, T2<:Real}(
-    data::IdDataObject{T1}, model::S, x0::AbstractVector{T2}; options::IdOptions=IdOptions())
+function pem{S<:PolynomialModel, T1<:Real, T2<:Real,V1,V2}(
+    data::IdDataObject{T1,V1,V2}, model::S, x0::AbstractVector{T2}; options::IdOptions=IdOptions())
 
   k = length(x0) # number of parameters
   last_x  = ones(T2,k)
@@ -60,12 +60,12 @@ function pem{S<:PolynomialModel, T1<:Real, T2<:Real}(
   end
 
   println(fieldnames(opt))
-  mse       = _mse(data, model, opt.minimizer)
+  mse       = _mse(data, model, opt.minimizer, options)
   modelfit  = _modelfit(mse, data.y)
   println(mse)
   println(modelfit)
   idinfo    = IterativeIdInfo(mse, modelfit, opt, model)
-  Θₚ,icbf,icdc,iccda = _split_params(model, opt.minimizer, IdOptions())
+  Θₚ,icbf,icdc,iccda = _split_params(model, opt.minimizer, options)
   A,B,F,C,D = _getpolys(model, Θₚ)
 
   IdMFD(A,B,F,C,D,data.Ts,idinfo)
@@ -136,10 +136,10 @@ function _getpolys{T<:Real,S}(model::PolynomialModel{FullPolynomialOrder{S}},
   return A,B,F,C,D
 end
 
-function _mse{T<:Real,S<:PolynomialModel}(data::IdDataObject{T}, model::S, x)
+function _mse{T<:Real,S<:PolynomialModel, O}(data::IdDataObject{T}, model::S, x, options::IdOptions{O}=IdOptions())
   y     = data.y
   N     = size(y,1)
-  y_est = predict(data, model, x)
+  y_est = predict(data, model, x, options)
   sumabs2(y-y_est,1)[:]/N
 end
 
@@ -184,21 +184,21 @@ function predict{T1,V1,V2,S,M,O}(data::IdDataObject{T1,V1,V2},
   return temp3 # 10.53 [Ljung1999]
 end
 
-function _split_params{S,M,O}(model::PolynomialModel{S,M}, Θ, options::IdOptions{O})
+function _split_params{S,M,O,T}(model::PolynomialModel{S,M}, Θ::AbstractArray{T}, options::IdOptions{O})
   na,nb,nf,nc,nd,nk = orders(model)
 
-  ny   = model.ny
-  nbf  = max(nb, nf)
-  ndc  = max(nd, nc)
-  ncda = max(nc, nd+na)
-  m  = ny^2*(na+nf+nc*nd)+nu*ny*nb
-  mi = (ndc+nbf+ncda)*ny
+  ny,nu = model.ny,model.nu
+  nbf   = max(nb, nf)
+  ndc   = max(nd, nc)
+  ncda  = max(nc, nd+na)
+  m     = ny^2*(na+nf+nc*nd)+nu*ny*nb
+  mi    = (ndc+nbf+ncda)*ny
 
   Θₚ = Θ[1:m]
-  Θᵢ = options.estimate_initial ? Θ[m+1:m+mi] : zeros(mi)
-  icbf  = nbf > 0  ? reshape(Θᵢ[1:nbf*ny], nbf, ny)                  : zeros(0,0)
-  icdc  = ndc > 0  ? reshape(Θᵢ[nbf*ny+(1:ndc*ny)], nbf, ny)         : zeros(0,0)
-  iccda = ncda > 0 ? reshape(Θᵢ[(nbf+ndc)*ny+(1:ncda*ny)], nbf, ny) : zeros(0,0)
+  Θᵢ = options.estimate_initial ? Θ[m+1:m+mi] : zeros(T,mi)
+  icbf  = nbf > 0  ? reshape(Θᵢ[1:nbf*ny], nbf, ny)                 : zeros(T,0,0)
+  icdc  = ndc > 0  ? reshape(Θᵢ[nbf*ny+(1:ndc*ny)], nbf, ny)        : zeros(T,0,0)
+  iccda = ncda > 0 ? reshape(Θᵢ[(nbf+ndc)*ny+(1:ncda*ny)], nbf, ny) : zeros(T,0,0)
   return Θₚ, icbf, icdc, iccda
 end
 
@@ -234,7 +234,7 @@ function gradhessian!{T<:Real, T2<:Real, S<:PolynomialModel, O}(
     ny = data.ny
     N  = size(y,1)
 
-    Psit  = psit(data, model, x)  # Psi the same for all outputs
+    Psit  = psit(data, model, x, options)  # Psi the same for all outputs
     y_est = predict(data, model, x, options)
     eps   = y - y_est
     V     = cost(y, y_est, N, options)
