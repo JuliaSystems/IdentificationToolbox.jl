@@ -60,11 +60,8 @@ include("utilities/compare.jl")
 
 # methods
 include("methods/pem.jl")
-include("methods/armax.jl")
-include("methods/bj.jl")
-include("methods/oe.jl")
+include("methods/siso_poly_pem.jl")
 #include("methods/arx.jl")
-include("methods/fir.jl")
 #include("methods/stmcb.jl")
 #include("methods/morsm.jl")
 #include("methods/n4sid.jl")

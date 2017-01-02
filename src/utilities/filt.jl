@@ -123,13 +123,15 @@ function filt!{H,T,S,G}(out::AbstractArray{H}, b::PolyMatrix{T},
 
   # Pad the coefficients with zeros if needed
   if bs < sz
+    bc = coeffs(b)
     for i = bs+1:sz
-      b[i] = zeros(similar(b[1]))
+      insert!(bc, i, zeros(similar(bc[0])))
     end
   end
   if 0 < as < sz
+    ac = coeffs(a)
     for i = as+1:sz
-      a[i] = zeros(similar(a[1]))
+      insert!(ac, i, zeros(similar(ac[0])))
     end
   end
 
@@ -171,24 +173,22 @@ end
 
 # polynomial filtering
 function filt{T,S,G}(b::Poly{T}, a::Poly{S},
-  x::AbstractVector{G}, si=zeros(promote_type(S, G, T), length(coeffs(a))-1))
-  return filt(reverse(coeffs(b)), reverse(coeffs(a)), x, si)
+  x::AbstractArray{G}, si=zeros(promote_type(S, G, T), length(coeffs(a))-1))
+  return filt(coeffs(b), coeffs(a), x, si[:])
 end
 
 function filt{T,S,G}(b::T, a::Poly{S},
-  x::AbstractVector{G}, si=zeros(promote_type(S, G, T), length(coeffs(a))-1))
+  x::AbstractArray{G}, si=zeros(promote_type(S, G, T), length(coeffs(a))-1))
   out = Array(promote_type(T, G, S), size(x,1))
   _filt_ar!(out, a/b, x, si)
   return out
 end
 
 function _filt_ar!{T,S}(
-  out::AbstractVector{T}, a::Poly{T},
-  x::AbstractArray{T}, si::AbstractVector{S})
+  out::AbstractArray{T}, a::Poly{T},
+  x::AbstractArray{T}, si::AbstractArray{S})
   silen = size(si,1)
-  println(si)
-  ac = reverse(coeffs(a))
-  println(ac)
+  ac = coeffs(a)
   val = zero(T)
   @inbounds @simd for i=1:size(x, 1)
     xi = x[i]
