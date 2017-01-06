@@ -1,132 +1,74 @@
-immutable ARX <: OneStepIdMethod
-  ic::Symbol
-  feedthrough::Bool
 
-  @compat function (::Type{ARX})(ic::Symbol, feedthrough::Bool)
-    @assert in(ic, Set([:truncate,:zero]))  string("ic must be either :truncate or :zero")
-      new(ic, feedthrough)
-  end
+function arx{T<:Real}(data::IdDataObject{T}, n::Vector{Int},
+  options::IdOptions=IdOptions(estimate_initial=false))
+    arx(data, ARX(n[1],n[2],n[3]), options)
 end
 
-function ARX(; ic::Symbol=:truncate, feedthrough::Bool=false)
-  ARX(ic, feedthrough)
+function arx{T<:Real, V1<:AbstractArray, V2<:AbstractArray}(
+  data::IdDataObject{T,V1,V2}, na, nb, nk;
+  options::IdOptions=IdOptions(estimate_initial=false))
+    arx(data, ARX(na,nb,nk,data.ny,data.nu), options)
 end
 
-function fitmodel{T<:Real}(data::IdDataObject{T}, n::Vector{Int}, method::ARX; kwargs...)
-  arx(data, n, method)
-end
-
-arx{T<:Real}(data::IdDataObject{T}, n::Vector{Int}, method::ARX=ARX()) =
-  arx(data, n[1], n[2], n[3], method)
-
-function arx{T<:Real}(data::IdDataObject{T}, na::Int, nb::Int,
-    nk::Vector{Int}, method::ARX=ARX())
-  y,u = data.y, data.u
-  ny  = data.ny
-  nu  = data.nu
-  N   = size(y,1)
-  m   = _arxordercheck(na,nb,nk)
+function arx{T,V1,V2,S,U}(
+  data::IdDataObject{T,V1,V2}, model::PolyModel{S,U,ARX},
+  options::IdOptions=IdOptions(estimate_initial=false))
+  na,nb,nf,nc,nd,nk = orders(model)
+  y,u   = data.y, data.u
+  ny,nu = data.ny,data.nu
+  N     = size(y,1)
 
   # estimate model
-  x, mse = _arx(data, na, nb, nk; method=method)
+  x, mse    = _arx(data, model, options)
 
-  # Calculate model error 100*(1 - mse[i]/cov(y[m:N,i]))
-  modelfit = [100*(1 - mse[i]/cov(y[m:N,i])) for i in 1:ny]
+  mse       = _mse(data, model, x, options)
+  modelfit  = _modelfit(mse, data.y)
+  idinfo    = OneStepIdInfo(mse, modelfit, model)
+  a,b,f,c,d = _getpolys(model, x)
 
-  idinfo = OneStepIdInfo(mse, modelfit, method, vcat([na,nb],nk))
-
-  A = view(x, 1:(na+1)*ny, :)
-  B = view(x, (na+1)*ny+1:size(x,1), :)
-  C = speye(T,ny)
-  D = speye(T,ny)
-  F = speye(T,ny)
-  IdMFD(A, B, C, D, F, data.Ts, idinfo, ny)
-end
-
-function _arxordercheck(na,nb,nk)
-  @assert na > -1       string("na must be positive")
-  @assert nb > -1       string("nb must be positive")
-  @assert all(nk .> -1) string("nk must be positive")
-  @assert na+nb > 0     string("na+nb must be greater than zero")
-  max(na,nb+maximum(nk)-1)
-end
-
-function arx{T<:Real, V1<:AbstractVector, V2<:AbstractVector}(
-  data::IdDataObject{T,V1,V2}, na::Int, nb::Int,
-    nk::Int, method::ARX=ARX())
-  y,u = data.y, data.u
-  N   = size(y,1)
-  m   = _arxordercheck(na,nb,nk)
-
-  # estimate model
-  x, mse = _arx(data, na, nb, nk; method=method)
-
-  # Calculate model error 100*(1 - mse[i]/cov(y[m:N,i]))
-  modelfit = 100*(1 - mse/cov(y[m:N]))
-
-  idinfo = OneStepIdInfo(mse, modelfit, method, [na,nb,nk])
-
-  a = vcat(ones(T,1),   x[1:na])
-  b = vcat(zeros(T,nk), x[na+1:na+nb])
-  c = ones(T,1)
-  d = ones(T,1)
-  f = ones(T,1)
   IdMFD(a, b, c, d, f, data.Ts, idinfo)
 end
 
-function predict{T1<:Real, V1<:AbstractVector, V2<:AbstractVector, V3<:AbstractVector}(
-    data::IdDataObject{T1,V1,V2}, n::Vector{Int}, x::V3, method::ARX)
-  return _predict_arx(data.y, data.u, n..., x; ic=method.ic)
+function predict{T1,V1,V2,V3<:AbstractVector,S,U}(
+    data::IdDataObject{T1,V1,V2}, model::PolyModel{S,U,ARX}, x::V3,
+    options::IdOptions=IdOptions(estimate_initial=false))
+  return _predict_arx(data, model, x, options)
 end
 
-function _predict_arx{V1<:AbstractVector, V2<:AbstractVector, V3<:AbstractVector}(
-    y::V1, u::V2, na::Int, nb::Int, nk::Int, theta::V3; ic::Symbol=:truncate)
-  T = promote_type(eltype(y), eltype(u), eltype(theta))
+function _predict_arx{T1,V1,V2,T2,S,U}(data::IdDataObject{T1,V1,V2},
+    model::PolyModel{S,U,ARX},Θ::AbstractVector{T2},
+    options::IdOptions=IdOptions(estimate_initial=false))
+  T = promote_type(T1, T2)
   m = max(na, nb+nk-1)
+  estimate_initial = options.estimate_initial
 
-  a = append!(zeros(T,1),  theta[1:na])
-  b = append!(zeros(T,nk), theta[na+1:na+nb])
+  a = append!(zeros(T,1),  Θ[1:na])
+  b = append!(zeros(T,nk), Θ[na+1:na+nb])
   N = length(y)
   y_est = zeros(T,N)
-  if ic == :truncate
+  if estimate_initial
     # assume y_est = y for t=1:m to find initial states for the filters
     y_est[1:m]   = y[1:m]
     si           = filtic(b,  ones(T,1), filt(b,  ones(T,1), u[m:-1:1]), u[m:-1:1])
     si2          = filtic(-a, ones(T,1), filt(-a, ones(T,1), y[m:-1:1]), y[m:-1:1])
     y_est[m+1:N] = filt(b, ones(T,1), u[m+1:N], si) + filt(-a, ones(T,1), y[m+1:N], si2)
-  else  # ic == :zero
+  else
     # zero initial conditions
     y_est = filt(b, ones(T,1), u) + filt(-a, ones(T,1), y)
   end
   return y_est
 end
 
-function _arx{T<:Real, A1<:AbstractArray, A2<:AbstractArray}(
-    data::IdDataObject{T,A1,A2}, na::Int, nb::Int, nk::Int;
-    method::ARX=ARX())
-    return _arx(data, na, nb, [nk]; method=method)
-end
-
-function _arx{T<:Real, A1<:AbstractArray, A2<:AbstractArray}(
-    data::IdDataObject{T,A1,A2}, na::Int, nb::Vector{Int}, nk::Vector{Int};
-    method::ARX=ARX())
-    return _arx(data, [na], nb, nk; method=method)
-end
-
-function _arx{T<:Real, A1<:AbstractArray, A2<:AbstractArray}(
-    data::IdDataObject{T,A1,A2}, na::Vector{Int}, nb::Int, nk::Int;
-    method::ARX=ARX())
-    return _arx(data, na, [nb], [nk]; method=method)
-end
-
-function _arx{T<:Real, A1<:AbstractArray, A2<:AbstractArray}(
-    data::IdDataObject{T,A1,A2}, na::Int, nb::Int, nk::Vector{Int};
-    method::ARX=ARX())
+function _arx{T,A1,A2,S,U}(
+    data::IdDataObject{T,A1,A2}, model::PolyModel{S,U,ARX},
+    options::IdOptions=IdOptions(estimate_initial=false))
+  na,nb,nf,nc,nd,nk = orders(model)
   y,u = data.y, data.u
   N   = size(y,1)
   ny  = data.ny
   nu  = data.nu
-  feedthrough = method.feedthrough
+  estimate_initial = options.estimate_initial
+  feedthrough = false # method.feedthrough
   @assert size(u,1)  == N "Input and output need have the same number of samples"
 #  @assert length(nb) == nu "nb must have correct size"
 #  @assert length(na) == ny "na must have correct size"
@@ -163,28 +105,27 @@ function _arx{T<:Real, A1<:AbstractArray, A2<:AbstractArray}(
 #  thetam::Matrix{T} = zeros(T,l*m,ny)
   # Compute efficiently for order m
 
-  if method.ic == :truncate
+  if estimate_initial
     Φ, Y = _fill_truncate_ic(datat, md, m, feedthrough=feedthrough)
-  elseif method.ic == :zero
+  else
     Φ, Y = _fill_zero_ic(datat, md, m, feedthrough=feedthrough)
   end
   Θ = _ls_toeplitz(Φ, Y)
   mse = _mse(Θ, Φ, Y)
 
-  # get Θ in the form Θ = [I A₁ᵀ A₂ᵀ… B₁ᵀ B₂ᵀ …]ᵀ
-  Θᵣ = zeros(T, (nb+na+1)*ny,ny)
-  Θᵣ[1:ny,1:ny] = eye(T,ny)
+  # get Θ in the form Θ = [A₁ᵀ A₂ᵀ… B₁ᵀ B₂ᵀ …]ᵀ
+  Θᵣ = zeros(T, nb*nu+na*ny,ny)
   for k = 1:na
     idx = (k-1)*2ny+(1:ny)
-    Θᵣ[(k-1)*2ny+ny+(1:ny),:] = Θ[idx,:]
+    Θᵣ[(k-1)*ny+(1:ny),:] = Θ[idx,:]
   end
   for k = 1:nb
-    idx = (k-1)*2ny+(1:ny) + ny
-    Θᵣ[(k-1)*2ny+2ny+(1:ny),:] = Θ[idx,:]
+    idx = (k-1)*(ny+nu)+(1:nu) + ny
+    Θᵣ[na*ny+(k-1)*nu+(1:nu),:] = Θ[idx,:]
   end
 
   # /TODO simulation and prediction for MIMO ARX
-  return Θᵣ, mse
+  return vec(Θᵣ), mse
 end
 
 function _mse{T}(Θ::AbstractMatrix{T}, Φ::AbstractMatrix{T},

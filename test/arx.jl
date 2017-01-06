@@ -5,7 +5,7 @@ a = [0.5, 0.2, 0.1]
 b = [0.1, 0.3, 0.2]
 
 # model orders
-na, nb = 3, 3
+na, nb = 30, 30
 nk = 1
 n = [na, nb, nk]
 
@@ -51,10 +51,16 @@ e2 = sqrt(lambda)*randn(N)
 y1 = filt(B,A,u1) + filt(B,A,u2) + filt(1,A,e1)
 y2 = filt(B,A,u1) + filt(B,A,u2) + filt(1,A,e2)
 
-data2 = iddata(hcat(y1,y2), hcat(u1,u2))
+data2 = iddata(hcat(y1), hcat(u1,u2))
 
 push!(S, arx(data2, na, nb, [1, 1]))
 
-_arx(data2, na, nb, [1, 1])
+model = ARX(na, nb, [1, 1], 1, 2)
+@time _arx(data2, model)
 
-typeof(S[3].A)
+ny = 1
+nu = 2
+@time sys = pem(data2, model, randn((na*ny^2+nb*ny*nu)), options=IdOptions(autodiff=true,estimate_initial=false))
+
+sys.info.mse
+sys.info.opt

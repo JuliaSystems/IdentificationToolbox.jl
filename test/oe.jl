@@ -51,25 +51,25 @@ f = [0.5]
 B = [0;b]
 F = [1;f]
 
-nb = nf = 1
+nb = nf = 10
 
-N = 2000
-u1 = randn(N)
-u2 = randn(N)
-lambda = 1
+N  = 200
+u1 = 10*randn(N)
+u2 = 10*randn(N)
+lambda = 0.1
 e1 = sqrt(lambda)*randn(N)
 e2 = sqrt(lambda)*randn(N)
-y1 = filt(B,F,u1) + filt(B,F,u2) + e1
-y2 = 0*filt(B,F,u1) + filt(B,F,u2) + e2
+y1 = filt(B,F,u1) + 0.*filt(B,F,u2) + e1
+y2 = 0.1*filt(B,F,u1) + filt(B,F,u2) + e2
 
-u = hcat(u1,u2)
+u = hcat(u1)
 y = hcat(y1)
 data2 = iddata(y, u)
 
-ny = 1
-nu = 2
+ny = size(u,2)
+nu = size(y,2)
 
-model = OE(nb,nf,1,ny,nu)
+model = OE(nb,nf,[1,1],ny,nu)
 model2 = OE(nb,nf,[1],ny,nu)
 orders(model)
 
@@ -83,33 +83,62 @@ _mse(data2, model, randn(m+m0))
 psi = psit(data2, model, randn(m+m0))
 orders(model)
 
-x0 = vcat(b[1]*ones(nu,ny), f[1]*eye(ny))[:]
+x0 = vcat(b[1]*ones(nu,ny), zeros((nb-1)*nu,ny), f[1]*eye(ny), zeros((nf-1)*ny,ny))[:]
 #x0 = vcat(b[1]*ones(nu,ny), b[2]*ones(nu,ny), b[3]*ones(nu,ny), f[1]*eye(ny), f[2]*eye(ny), f[3]*eye(ny))[:]
-
-x0[2] = 0.5
 x0 = vcat(x0,zeros(m0))
-ap,bp,fp,cp,dp = _getpolys(model,x0)
-ap,bp2,fp2,cp,dp = _getpolys(model2,x0)
 
-
-filt(bp2,fp2,u)
-filt(bp,fp,u)
-filt(1,fp,u)
-filt(Poly([1.]),fp,u)
-
+options = IdOptions(extended_trace=false, iterations = 10, autodiff=true, show_trace=true, estimate_initial=false)
 cost(data2, model, x0, options)
 
-options = IdOptions(f_tol=1e-64, extended_trace=false, iterations = 100, autodiff=false, show_trace=true, estimate_initial=true)
-@time sys = pem(data2, model, x0 + 0.1*randn(length(x0)), options=options) # , IdOptions(f_tol = 1e-32)
-sys.B
-sys.F
-sys.info.opt
-fieldnames(sys.info.opt.trace[1].metadata)
-sys.info.opt.trace[1]
+@time sys1 = pem(data2, model, x0 + 0.1*randn(length(x0)), options) # , IdOptions(f_tol = 1e-32)
+sys1.B
+sys1.F
+sys1.info.opt
+sys1.info.mse
+fieldnames(sys1.info.opt.trace[1].metadata)
+sys1.info.opt.trace[1]
+
+options2 = IdOptions(f_tol=1e-64, extended_trace=false, iterations = 1, autodiff=true, show_trace=true, estimate_initial=false)
+#_stmcb(data2,model,options2)
+@time sys2 = stmcb(data2,model,options2)
+sys2.B
+sys2.F
+sys2.info.mse
+
+uz    = zeros(100,nu)
+uz[1] = 1.0
+g2 = filt(sys2.B,sys2.F,uz)
+g1 = filt(sys1.B,sys1.F,uz)
+gt = filt(B,F,uz)
+
+norm(g2-gt)
+norm(g1-gt)
+
+b2 = zeros(ny,nu*nb)
+for i = 1:nb
+  b2[:,(i-1)*nu+(1:nu)] = sys2.B.coeffs[i][:,:].'
+end
+f2 = zeros(ny,ny*nf)
+for i = 1:nf
+  f2[:,(i-1)*ny+(1:ny)] = sys2.F.coeffs[i][:,:].'
+end
+x02 = vcat(b2.',f2.')[:]
+
+sumabs2(g1-gt)
+sumabs2(g2-gt)
+norm(g2-gt)
+norm(g1-gt)
+
+@time sys1 = pem(data2, model, x02, options) # , IdOptions(f_tol = 1e-32)
+@time sys1 = pem(data2, model, sys1.info.opt.minimizer, options)
+sys1.B
+sys1.F
+sys1.info.opt
+sys1.info.mse
 
 sys.info.opt.trace[1].metadata.vals
 
-options.estimate_initial
+options.OptimizationOptions.iterations
 
 df = TwiceDifferentiableFunction(x->cost(data2, model, x0, options))
 stor = zeros(2m,2m)
@@ -140,78 +169,84 @@ predict(data2, model, x0)
 
 
 
-model = ARMAX(1,1,1,[1,1],ny,nu)
+model = OE(1,1,[1],ny,nu)
 orders(model)
 x0 = vcat(f[1]*ones(nu,ny), b[1]*eye(ny), 0.1*eye(ny))[:]
 m = length(x0)
 
+options = IdOptions(f_tol=1e-64, extended_trace=false, iterations = 100, autodiff=false, show_trace=true, estimate_initial=false)
 @time sys = pem(data2, model, x0+0.05*randn(m))
-sys.A
-sys.B
-sys.C
-sys.info.opt
-
-model = BJ(1,1,1,1,[1,1],ny,nu)
-orders(model)
-x0 = vcat(b[1]*ones(nu,ny), f[1]*eye(ny), 0.1*eye(ny), 0.1*eye(ny))[:]
-m = length(x0)
-
-@time sys = pem(data2, model, x0+0.05*randn(m))
-sys.A
-sys.B
 sys.F
-sys.C
-sys.D
-sys.info.opt
-
-model = FIR(8,1,ny,nu)
-orders(model)
-x0 = vcat(b[1]*ones(nu,ny), 0.0*ones(7*nu,ny))[:]
-m = length(x0)
-
-x0 = vcat(x0, zeros(m))
-
-options = IdOptions(f_tol=1e-64, extended_trace=false, iterations = 100, autodiff=true, show_trace=true, estimate_initial=false)
-@time sys = pem(data2, model, x0, options=options)
 sys.B
 sys.info.opt
 
+sys = stmcb(data2,model)
+_stmcb(data2, model, options)
+
+options.OptimizationOptions.iterations
 
 
-model = ARARX(1,1,1,1,ny,nu)
-x0 = vcat(f[1]*eye(ny), b[1]*ones(nu,ny), 0*ones(1*ny,ny), 0*ones(1*ny,ny))[:]
-m = length(x0)
+b = [0.3]
+f = [0.5]
 
-na,nb,nf,nc,nd = orders(model)
-nbf  = max(nb, nf)
-ndc  = max(nd, nc)
-ncda = max(nc, nd+na)
-m0 = nbf+ndc+ncda
-x0 = vcat(x0,zeros(m0))
+B = [0;b]
+F = [1;f]
 
-options = IdOptions(f_tol=1e-64, extended_trace=false, iterations = 100, autodiff=true, show_trace=true, estimate_initial=true)
-@time sys = pem(data2, model, x0+0.1*randn(length(x0)))
-sys.B
-sys.A
-sys.info.opt
+nb = nf = 10
 
-_split_params(model, x0, options)
-_getpolys(model, x0[1:4])
+N  = 200
+u1 = 1*randn(N)
+u2 = 1*randn(N)
+lambda = 0.0001
+e1 = sqrt(lambda)*randn(N)
+e2 = sqrt(lambda)*randn(N)
+y1 = filt(B,F,u1) + 0.*filt(B,F,u2) + e1
+y2 = 0.1*filt(B,F,u1) + filt(B,F,u2) + e2
 
-na = nb = m = 10
-model = ARX(m,m,[1,1],ny,nu)
-x0 = zeros(ny^2*na+nb*ny*nu)
-m = length(x0)
+u = hcat(u1,u2)
+y = hcat(y1,y2)
+data2 = iddata(y, u)
 
-na,nb,nf,nc,nd = orders(model)
-nbf  = max(nb, nf)
-ndc  = max(nd, nc)
-ncda = max(nc, nd+na)
-m0 = nbf+ndc+ncda
-x0 = vcat(x0,zeros(m0))
+ny = size(y,2)
+nu = size(u,2)
 
-options = IdOptions(f_tol=1e-64, extended_trace=false, iterations = 100, autodiff=true, show_trace=true, estimate_initial=false)
-@time sys = pem(data2, model, x0+0.1*randn(length(x0)), options=options)
-sys.B
-sys.A
-sys.info.opt
+
+mna = ones(Int,ny,ny)
+mnb = ones(Int,ny,nu)
+mnf = ones(Int,ny,nu)
+mnc = 0*ones(Int,ny)
+mnd = 0*ones(Int,ny)
+mnk = ones(Int,ny,nu)
+order = MPolyOrder(mna,mnb,mnf,mnc,mnd,mnk)
+model = PolyModel(order, ny, nu, ControlCore.Siso{false}, CUSTOM)
+nparam = sum(mna) + sum(mnb) + sum(mnf) + sum(mnc) + sum(mnd)
+x = zeros(nparam)
+x[5] = b[1]
+x[9] = f[1]
+
+x
+
+predict(data2,model,x)
+cost(data2,model,x)
+pem(data2,model,x)
+
+
+y
+
+
+
+
+
+
+
+a = randn(20)
+b = randn(1000)
+p1 = Poly(a)
+p2 = Poly(b)
+using BenchmarkTools
+
+@benchmark p1*p2
+@benchmark _poly_mul1(a,b)
+@benchmark _poly_mul2(a,b)
+@benchmark _poly_mul3(a,b)
+@benchmark _poly_mul4(a,b)

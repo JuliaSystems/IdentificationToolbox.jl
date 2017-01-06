@@ -76,9 +76,11 @@ function _getvec{T<:Real}(n::AbstractVector{Int}, x::AbstractVector{T}, method::
   return a,b,c,d,f
 end
 
-function _morsm{T<:Real, V1<:AbstractVector, V2<:AbstractVector}(
-  data::IdDataObject{T,V1,V2}, n::Vector{Int}, method::MORSM=MORSM())
-  ic        = method.ic
+function _morsm{T<:Real,A1,A2}(
+  data::IdDataObject{T,A1,A2}, model::PolyModel{S,U,ARX},
+  options::IdOptions=IdOptions(estimate_initial=false))
+  estimate_initial = options.estimate_initial
+
   filter    = method.filter
   version   = method.version
   loop      = method.loop
@@ -86,7 +88,7 @@ function _morsm{T<:Real, V1<:AbstractVector, V2<:AbstractVector}(
   maxiter   = method.maxiter
   tol       = method.tol
   y, u      = data.y, data.u
-  N         = length(y)
+  N         = size(y,1)
   maxorder  = convert(Int,min(floor(N/20),40))
   orderh    = maxorder+2
   if method.version == :G
@@ -104,24 +106,37 @@ function _morsm{T<:Real, V1<:AbstractVector, V2<:AbstractVector}(
   @assert nk >= 0            string("nk must be greater or equal to zero")
 
 # find high order noise model
-  Θ       = _arx(data, [orderh; orderh; nk], ARX(ic,false))[1]
-  ah      = Θ[1:orderh]
-  bh      = Θ[orderh+1:end]
-  Ah      = append!(ones(T,1), ah)
-  Bh      = append!(zeros(T,nk), bh)
+  # Θ       = _arx(data, [orderh; orderh; nk], ARX(ic,false))[1]
+  # ah      = Θ[1:orderh]
+  # bh      = Θ[orderh+1:end]
+  # Ah      = append!(ones(T,1), ah)
+  # Bh      = append!(zeros(T,nk), bh)
+
+  Sₕ = arx(data, modelₕ; options = options)
+  Aₕ = Sₕ.A
+  Bₕ = Sₕ.B
+
+  Iₗ = PolyMatrix(eye(T,ny),(ny,ny))
 
   bestx   = zeros(T,sum(n[1:4]))
   bestpe  = typemax(Float64)
   for m in orders
-    Θ = _arx(data, [m; m; nk], ARX(ic,false))[1]
-    a = append!(ones(T,1), Θ[1:m])
-    b = append!(zeros(T,nk), Θ[m+1:end])
+    Sₗ = arx(data, modelₗ; options = options)
+    Aₗ = Sₗ.A
+    Bₗ = Sₗ.B
 
-    uf = filt(a,1,u)
+    # Θ = _arx(data, [m; m; nk], ARX(ic,false))[1]
+    # a = append!(ones(T,1), Θ[1:m])
+    # b = append!(zeros(T,nk), Θ[m+1:end])
+    A = PolyMatrix(vcat(eye(T,ny),      xa), (ny,ny))
+    B = PolyMatrix(vcat(zeros(T,ny,nu), xb), (ny,nu))
+
+
+    uf = filt(Aₗ,1,u)
     if filter == :input
-      yf = filt(b, ones(T,1), u)
+      yf = filt(Bₗ, Iₗ, u)
     else # filter == :data
-      yf = filt(a, ones(T,1), y)
+      yf = filt(Aₗ, Iₗ, y)
     end
     dataf = iddata(yf, uf, data.Ts)
     ΘG, pe  = _stmcb(dataf, [nb; nf; nk], STMCB(ic, false, maxiter, tol))

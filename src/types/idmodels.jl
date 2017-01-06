@@ -10,12 +10,32 @@ immutable FullPolyOrder{S} <: AbstractModelOrder
 
   @compat function (::Type{FullPolyOrder})(na::Int, nb::Int, nf::Int, nc::Int,
     nd::Int, nk::Vector{Int})
+    _fullpolyordercheck(na,nb,nf,nc,nd,nk)
     new{ControlCore.Siso{false}}(na,nb,nf,nc,nd,nk)
   end
 
   @compat function (::Type{FullPolyOrder})(na::Int, nb::Int, nf::Int, nc::Int,
     nd::Int, nk::Int)
+    _fullpolyordercheck(na,nb,nf,nc,nd,nk)
     new{ControlCore.Siso{true}}(na,nb,nf,nc,nd,[nk])
+  end
+end
+
+function _fullpolyordercheck(na,nb,nc,nd,nf,nk)
+  for t in ((na,"na"),(nb,"nb"),(nf,"nf"),(nc,"nc"),(nd,"nd"))
+    n,s = t
+    if n < 0
+      warn("FullPolyOrder: $s must be positive")
+      throw(DomainError())
+    end
+  end
+  if any(nk .< 0)
+    warn("FullPolyOrder: nk must be positive")
+    throw(DomainError())
+  end
+  if na+nb+nf+nc+nd < 1
+    warn("FullPolyOrder: at least one model order must be greater than zero")
+    throw(DomainError())
   end
 end
 
@@ -196,6 +216,47 @@ function orders(model::PolyModel)
   return orders(model.orders)
 end
 
-function orders(order::FullPolyOrder)
+function orders(order::AbstractModelOrder)
   return order.na, order.nb, order.nf, order.nc, order.nd, order.nk
+end
+
+#= Matlab MIMO model
+A(q)y = B(q)/F(q)u + C(q)/D(q)e
+A(q) is polynomial matrix of size ny×ny with A(q) = I + A₁q^(-1) + A₂q^(-2) ...
+B(q) and F(q) are matrices of size ny×nu of SISO Polynomials representing the entries of the
+numerator and denominator of the matrix of SISO transfer functions B(q)/F(q)
+C(q) and D(q) are diagonal polynomial matrices
+=#
+
+immutable MPolyOrder <: AbstractModelOrder
+  na::Matrix{Int}
+  nb::Matrix{Int}
+  nf::Matrix{Int}
+  nc::Vector{Int}
+  nd::Vector{Int}
+  nk::Matrix{Int}
+
+  @compat function MPolyOrder(na::Matrix{Int}, nb::Matrix{Int}, nf::Matrix{Int},
+    nc::Vector{Int}, nd::Vector{Int}, nk::Matrix{Int})
+    _mpolyordercheck(na,nb,nf,nc,nd,nk)
+    new(na,nb,nf,nc,nd,nk)
+  end
+end
+
+function _mpolyordercheck(na,nb,nc,nd,nf,nk)
+  for t in ((na,"na"),(nb,"nb"),(nf,"nf"),(nc,"nc"),(nd,"nd"))
+    n,s = t
+    if any(n .< 0)
+      warn("MPolyOrder: $s must be positive")
+      throw(DomainError())
+    end
+  end
+  if any(nk .< 0)
+    warn("MPolyOrder: nk must be positive")
+    throw(DomainError())
+  end
+  if sum(na.+nb.+nf.+nc.+nd) < 1
+    warn("FullPolyOrder: at least one model order must be greater than zero")
+    throw(DomainError())
+  end
 end

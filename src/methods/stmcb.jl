@@ -1,112 +1,98 @@
 
-immutable STMCB <: OneStepIdMethod
-  ic::Symbol
-  feedthrough::Bool
-  maxiter::Int
-  tol::Float64
 
-  @compat function (::Type{STMCB})(ic::Symbol, feedthrough::Bool, maxiter::Int, tol::Float64)
-    @assert in(ic, Set([:truncate,:zero]))  string("ic must be either :truncate or :zero")
-    @assert maxiter > 0                     string("maxiter need to be greater than zero")
-    @assert tol >= 0                        string("tol need to be greater or equal to zero")
+function stmcb{T,A1,A2,S,U}(
+    data::IdDataObject{T,A1,A2}, model::PolyModel{S,U,OE},
+    options::IdOptions=IdOptions(estimate_initial=false),
+    C::Matrix{T}=zeros(T,0,0), D::Matrix{T}=zeros(T,0,0))
 
-    new(ic, feedthrough, maxiter, tol)::STMCB
+  x         = _stmcb(data, model, options, C, D)
+  mse       = _mse(data, model, x, options)
+  modelfit  = _modelfit(mse, data.y)
+  idinfo    = OneStepIdInfo(mse, modelfit, model)
+  a,b,f,c,d = _getpolys(model, x)
+
+  IdMFD(a, b, f, c, d, data.Ts, idinfo)
+end
+
+function _stmcb{T,A1,A2,S,U}(
+    data::IdDataObject{T,A1,A2}, model::PolyModel{S,U,OE},
+    options::IdOptions=IdOptions(estimate_initial=false),
+    c::Matrix{T}=ones(T,0,0), d::Matrix{T}=ones(T,0,0))
+  na,nb,nf,nc,nd,nk = orders(model)
+  y,u         = data.y,data.u
+  ny,nu       = data.ny,data.nu
+  feedthrough = false
+  iterations  = options.OptimizationOptions.iterations
+  @assert !feedthrough || nk > zero(Int) string("nk must be greater than zero if feedthrough term is known")
+
+  if ny != nu
+    warn("The steglitz Mcbride method is currently only implemented for square systems")
+    throw(DomainError())
   end
-end
 
-function STMCB(; ic::Symbol=:zero, feedthrough::Bool=false, maxiter::Int=20, tol::Float64=1e-10)
-  STMCB(ic, feedthrough, maxiter, tol)
-end
-
-function fitmodel{T<:Real}(data::IdDataObject{T}, n::Vector{Int}, method::STMCB; kwargs...)
-  stmcb(data, n, method)
-end
-
-function stmcb{T<:Real}(data::IdDataObject{T}, n::Vector{Int}, method::STMCB=STMCB())
-  nb,nf,nk = n
-  m        = max(nf, nb+nk-1)+1
-  N        = data.N
-  @assert nf    > -1 string("nf must be positive")
-  @assert nb    > -1 string("nb must be positive")
-  @assert nk    > -1 string("nk must be positive")
-  @assert nf+nb >  0 string("nb+nf must be greater than zero")
-
-  x, mse = _stmcb(data, n, method)
-  modelfit = 100 * (1 - sqrt((N-m)*mse) / norm(data.y[m:N]-mean(data.y[m:N])))
-
-  a,b,c,d,f = _getvec(n, x, method)
-  info      = OneStepIdInfo(mse, modelfit, method, n)
-  IdDSisoRational(a, b, c, d, f, data.Ts, info)
-end
-
-function _getvec{T<:Real}(n::AbstractVector{Int}, x::AbstractVector{T}, method::STMCB)
-  nb,nf,nk = n
-  if method.feedthrough
-    b = vcat(ones(T,1), zeros(T,nk-1), x[1:nb])
-  else
-    b = vcat(zeros(T,nk), x[1:nb])
+  # no known noise model
+  if length(c) < 1
+    c = eye(T,ny,ny)
+    d = eye(T,ny,ny)
   end
-  a = ones(T,1)
-  c = ones(T,1)
-  d = ones(T,1)
-  f = vcat(ones(T,1), x[nb+1:end])
-  return a,b,c,d,f
-end
+  nc = convert(Int, round(size(c,1)/ny)-1)
+  nd = convert(Int, round(size(d,1)/ny)-1)
 
-function _stmcb{T<:Real, V1<:AbstractVector, V2<:AbstractVector}(
-    data::IdDataObject{T,V1,V2}, n::Vector{Int}, method::STMCB=STMCB(),
-    c::Vector{T}=ones(T,0), d::Vector{T}=ones(T,0))
-  nb, nf, nk  = n
-  m           = nb+nf
-  y, u        = data.y, data.u
-  nc          = length(c)
-  nd          = length(d)
-  feedthrough = method.feedthrough
-  ic          = method.ic
-  maxiter     = method.maxiter
-  tol         = method.tol
-  # StMcB computes a model using the Steiglitz-McBride method
-@assert nb >= 0 && nf >= 0 string("nb and nf must be larger or equal to zero")
-@assert nk >= 0 string("nk must be greater or equal to zero")
-@assert !feedthrough || nk > zero(Int) string("nk must be greater than zero if feedthrough term is known")
+  bjmodel = feedthrough ? BJ(nb,nf,nc,nd,zeros(Int,nu),ny,nu) :
+                          BJ(nb,nf,nc,nd,nk,ny,nu)
 
   # first iteration the data is not pre-filtered
   yf     = copy(data.y)
   uf     = copy(data.u)
   dataf  = iddata(yf, uf, data.Ts)
 
-  bestpe = typemax(Float64)
-  best_b = zeros(T,1)
-  best_f = ones(T,1)
-  Θ      = zeros(m)
-  Θp     = zeros(m)
-  for i = 1:maxiter
-    Θ = _arx(dataf, [nf,nb,nk], ARX(ic, feedthrough))[1]
-    f = Θ[1:nf]
-    b = Θ[nf+1:end]
-    if feedthrough
-      x  = vcat(ones(T,1), zeros(T,nk-1), [b; c; d; f])
-      pe = calc_bj(data, [nb+nk,nc,nd,nf,0], x, BJ(ic=ic))
-    else
-      x  = vcat(b,c,d,f)
-      pe = calc_bj(data, [nb,nc,nd,nf,nk], x, BJ(ic=ic))
+  # initial model
+  arxmodel = ARX(nf,nb,nk,ny,nu)
+  Θ        = _arx(dataf, arxmodel, options)[1]
+  Θᵣ       = reshape(Θ, nb*nu+ny*nf, ny)
+  bestf    = Θᵣ[1:nf*ny,1:ny]
+  bestb    = Θᵣ[ny*nf+(1:nb*nu),1:ny]
+
+  x      = vcat(bestb, bestf, c, d)
+  bestpe = cost(data, bjmodel, x[:], options)
+  Θp     = Θ
+
+  println(bestpe)
+
+  # filter data
+  xf    = _blocktranspose(bestf, ny, ny, nf)
+  F     = PolyMatrix(vcat(eye(T,ny),xf), (ny,ny))
+  Iₗ    = PolyMatrix(eye(T,ny),(ny,ny))
+  yf    = filt(Iₗ, F, y)
+  uf    = filt(Iₗ, F, u)
+  dataf = iddata(yf, uf, data.Ts)
+  for i = 1:iterations
+    Θ  = _arx(dataf, arxmodel, options)[1]
+    Θᵣ = reshape(Θ, nb*nu+ny*nf, ny)
+    f  = Θᵣ[1:nf*ny,1:ny]
+    b  = Θᵣ[ny*nf+(1:nb*nu),1:ny]
+
+    x  = vcat(b, f, c, d)
+    pe = cost(data, bjmodel, x[:], options)
+
+    if rem(i,10) == 0
+      println(i)
+      println(pe)
     end
 
-    if pe < bestpe
-      best_b = b
-      best_f = f
+    #if pe < bestpe
+      bestb = b
+      bestf = f
       bestpe = pe
-    end
-  #  if norm(Θ-Θp) < norm(Θp)*tol
-  #    return vcat(best_b, best_f), bestpe
-  #  end
+    #end
 
     # filter data
-    F     = vcat(ones(T,1), f)
-    filt!(yf,one(T), F, y)
-    filt!(uf,one(T), F, u)
+    xf    = _blocktranspose(f, ny, ny, nf)
+    F     = PolyMatrix(vcat(eye(T,ny),xf), (ny,ny))
+    filt!(yf, Iₗ, F, y)
+    filt!(uf, Iₗ, F, u)
     dataf = iddata(yf, uf, data.Ts)
     Θp    = Θ
   end
-  return vcat(best_b, best_f), bestpe
+  return vcat(bestb, bestf)[:]
 end

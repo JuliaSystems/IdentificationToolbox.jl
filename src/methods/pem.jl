@@ -34,7 +34,7 @@ end
 # end
 
 function pem{S<:PolyModel, T1<:Real, T2<:Real,V1,V2}(
-    data::IdDataObject{T1,V1,V2}, model::S, x0::AbstractVector{T2}; options::IdOptions=IdOptions())
+    data::IdDataObject{T1,V1,V2}, model::S, x0::AbstractVector{T2}, options::IdOptions=IdOptions())
 
   k = length(x0) # number of parameters
   last_x  = ones(T2,k)
@@ -61,26 +61,6 @@ function pem{S<:PolyModel, T1<:Real, T2<:Real,V1,V2}(
 
   IdMFD(A,B,F,C,D,data.Ts,idinfo)
 end
-
-# function _getpolys{T<:Real,M}(model::PolyModel{ControlCore.Siso{true},
-#     FullPolyOrder{ControlCore.Siso{true}},M}, x::Vector{T})
-#   na,nb,nf,nc,nd,nk = orders(model)
-#
-#   a = vcat(ones(T,1),   x[             1:na ])
-#   b = vcat(zeros(T,nk), x[na+         (1:nb)])
-#   f = vcat(ones(T,1),   x[na+nb+      (1:nf)])
-#   c = vcat(ones(T,1),   x[na+nb+nf+   (1:nc)])
-#   d = vcat(ones(T,1),   x[na+nb+nf+nc+(1:nd)])
-#
-#
-#   A = Poly(a) #Poly(reverse(a))
-#   B = Poly(b) #Poly(reverse(b))
-#   F = Poly(f) # Poly(reverse(f))
-#   C = Poly(c) # Poly(reverse(c))
-#   D = Poly(d) # Poly(reverse(d))
-#
-#   return A,B,F,C,D
-# end
 
 function _blocktranspose{T<:Real}(x::AbstractMatrix{T}, ny::Int, nu::Int, nx::Int)
   nx == 0 && return zeros(T,0,nu)
@@ -132,8 +112,8 @@ function _modelfit{T<:Real}(mse, y::AbstractMatrix{T})
   modelfit = [100*(1 - mse[i]/cov(y[1:N,i])) for i in 1:ny] # TODO fix to correct order m y[m:N]
 end
 
-function predict{T1,V1,V2,S,U,M,O}(data::IdDataObject{T1,V1,V2},
-  model::PolyModel{S,U,M}, Θ, options::IdOptions{O}=IdOptions())
+function predict{T1,V1,V2,S,U,M,T2,O}(data::IdDataObject{T1,V1,V2},
+  model::PolyModel{S,U,M}, Θ::AbstractVector{T2}, options::IdOptions{O}=IdOptions())
   Θₚ,icbf,icdc,iccda = _split_params(model, Θ, options)
   a,b,f,c,d          = _getpolys(model, Θₚ)
   na,nb,nf,nc,nd,nk  = orders(model)
@@ -169,19 +149,191 @@ function _split_params{S,U,M,O,T}(model::PolyModel{S,U,M}, Θ::AbstractArray{T},
 end
 
 # calculate the value function V. Used for automatic differentiation
-function cost{T<:Real,S,U,M,O}(data::IdDataObject{T}, model::PolyModel{S,U,M}, x,
+function cost{T<:Real,S,M<:AbstractModelOrder,P,O}(data::IdDataObject{T}, model::PolyModel{S,M,P}, x,
     options::IdOptions{O}=IdOptions())
   y     = data.y
   N     = size(y,1)
   y_est = predict(data, model, x, options)
-
-  # if ic == :truncate
-  #   #TODO proper m
-  #   m = 0
-  #   return sumabs2(y-y_est)/(N-m)
-  # end
   return cost(y, y_est, N, options)
 end
 
 cost{T}(y::AbstractArray{T}, y_est, N::Int, options::IdOptions) =
   sumvalue(options.loss_function, y, y_est)/(2N)
+
+function _getpolys{T<:Real,S,M}(model::PolyModel{S,
+    MPolyOrder,M}, Θ::Vector{T})
+  na,nb,nf,nc,nd,nk = orders(model)
+  ny,nu             = model.ny,model.nu
+  Na,Nb,Nf,Nc,Nd    = sum(na),sum(nb),sum(nf),sum(nc),sum(nd)
+
+  a = view(Θ,1:Na)
+  b = view(Θ,Na+(1:Nb))
+  f = view(Θ,Na+Nb+(1:Nf))
+  c = view(Θ,Na+Nb+Nf+(1:Nc))
+  d = view(Θ,Na+Nb+Nf+Nc+(1:Nd))
+
+  A = Matrix{Vector{T}}(ny,ny)
+  B = Matrix{Vector{T}}(ny,nu)
+  F = Matrix{Vector{T}}(ny,nu)
+  C = Vector{Vector{T}}(ny)
+  D = Vector{Vector{T}}(ny)
+
+  ma=mb=mf=mc=md=0
+  for i = 1:ny
+    for j = 1:ny
+      if i == j
+        A[i,j] = vcat(ones(T,1), a[ma+1:na[i,j]])
+        C[i]   = vcat(ones(T,1), a[ma+1:na[i,j]])
+        D[i]   = vcat(ones(T,1), a[ma+1:na[i,j]])
+        ma  += na[i,j]
+        mc  += nc[i]
+        md  += nd[i]
+      else
+        A[i,j] = vcat(zeros(T,1), a[ma+1:na[i,j]])
+        ma += na[i,j]
+      end
+    end
+    for j = 1:nu
+      B[i,j] = vcat(zeros(T,nk[i,j]), b[mb+1:nb[i,j]])
+      F[i,j] = vcat(ones(T,1), f[mf+1:nf[i,j]])
+      mb    += nb[i,j]
+      mf    += nf[i,j]
+    end
+  end
+  return A,B,F,C,D
+end
+
+function predict{T1,A1,A2,S,P,T2,O}(data::IdDataObject{T1,A1,A2},
+    model::PolyModel{S,MPolyOrder,P}, Θ::AbstractVector{T2}, options::IdOptions{O}=IdOptions())
+
+  na,nb,nf,nc,nd,nk  = orders(model)
+  N,ny,nu            = data.N,data.ny,data.nu
+  Na,Nb,Nf,Nc,Nd     = sum(na),sum(nb),sum(nf),sum(nc),sum(nd)
+  a,b,f,c,d          = _getpolys(model, Θ)
+  T = promote_type(T1,T2)
+
+  out = zeros(T, N, ny)
+  for i = 1:ny
+    aᵢ = view(a,i,:)
+    bᵢ = view(b,i,:)
+    fᵢ = view(f,i,:)
+    cᵢ = c[i]
+    dᵢ = d[i]
+    _predict_i!(view(out,:,i),data,model,i,aᵢ,bᵢ,fᵢ,cᵢ,dᵢ,
+      view(na,i,:), view(nb,i,:), view(nf,i,:), view(nk,i,:))
+  end
+  return out
+end
+
+function _predict_i!{T1,T2,A1,A2,S,P}(out,data::IdDataObject{T1,A1,A2},
+    model::PolyModel{S,MPolyOrder,P}, i::Int, a::AbstractArray{Vector{T2}},
+    b::AbstractArray{Vector{T2}}, f::AbstractArray{Vector{T2}}, c::Vector{T2},
+    d::Vector{T2}, na::AbstractArray{Int}, nb::AbstractArray{Int},
+    nf::AbstractArray{Int}, nk::AbstractArray{Int})
+  for j in 1:nu
+    num = _poly_mul(a[i], _poly_mul(d, b[j]))
+    den = _poly_mul(c, f[j])
+    out[:] += filt(num, den, view(u,:,j))
+  end
+  for j in 1:ny
+    if j == i
+      continue
+    end
+    num = _poly_mul(a[i], _poly_mul(d, a[j]))
+    out[:] += filt(num, c, view(y,:,j))
+  end
+
+  tmp = _poly_mul(d,a[i])
+  num = vcat(c, zeros(T2, length(tmp)-length(c))) - tmp
+  out[:] += filt(num, c, view(y,:,i))
+end
+
+function _poly_mul(a, b)
+  T = promote_type(eltype(a), eltype(b))
+  n = length(a)-1
+  m = length(b)-1
+  r = zeros(T,m+n+1)
+  @inbounds for i in eachindex(a)
+    for j in eachindex(b)
+      r[i+j-1] += a[i] * b[j]
+    end
+  end
+  return r
+end
+
+# function predict{T1,A1,A2,S,P,T2,O}(data::IdDataObject{T1,A1,A2},
+#     model::PolyModel{S,MPolyOrder,P}, Θ::AbstractVector{T2}, options::IdOptions{O}=IdOptions())
+#
+#   na,nb,nf,nc,nd,nk  = orders(model)
+#   N,ny,nu            = data.N,data.ny,data.nu
+#   Na,Nb,Nf,Nc,Nd     = sum(na),sum(nb),sum(nf),sum(nc),sum(nd)
+#   a = view(Θ,1:Na)
+#   b = view(Θ,Na+(1:Nb))
+#   f = view(Θ,Na+Nb+(1:Nf))
+#   c = view(Θ,Na+Nb+Nf+(1:Nc))
+#   d = view(Θ,Na+Nb+Nf+Nc+(1:Nd))
+#
+#   nva = sum(na,1)
+#   nvb = sum(nb,1)
+#   nvf = sum(nf,1)
+#   nvc = sum(nc,1)
+#   nvd = sum(nd,1)
+#   ma=mb=mf=mc=md=0
+#   out = zeros(data.N, data.ny)
+#   for i = 1:ny
+#     aᵢ = view(a,ma+(1:nva[i]))
+#     bᵢ = view(b,mb+(1:nvb[i]))
+#     fᵢ = view(f,mf+(1:nvf[i]))
+#     cᵢ = view(c,mc+(1:nvc[i]))
+#     dᵢ = view(d,md+(1:nvd[i]))
+#     ma += nvb[i]
+#     mb += nvb[i]
+#     mf += nvf[i]
+#     mc += nvc[i]
+#     md += nvd[i]
+#     out[:,i] = _predict_i(data,model,i,aᵢ,bᵢ,fᵢ,cᵢ,dᵢ,
+#       view(na,i,:), view(nb,i,:), view(nf,i,:), view(nk,i,:))
+#   end
+#   return out
+# end
+#
+# function _predict_i{T1,T2,A1,A2,S,P}(data::IdDataObject{T1,A1,A2},
+#     model::PolyModel{S,MPolyOrder,P}, i::Int, a::AbstractVector{T2},
+#     b::AbstractVector{T2}, f::AbstractVector{T2} ,c::AbstractVector{T2},
+#     d::AbstractVector{T2}, na::AbstractArray{Int}, nb::AbstractArray{Int},
+#     nf::AbstractArray{Int}, nk::AbstractArray{Int})
+#   m  = sum(na[1:i-1])
+#   aᵢ = vcat(ones(T2,1), a[m+1:m+na[i]])
+#   cᵢ = vcat(ones(T2,1), c)
+#   dᵢ = vcat(ones(T2,1), d)
+#
+#   N,ny,nu = data.N, data.ny, data.nu
+#   y,u     = data.y, data.u
+#   out = zeros(N)
+#   mb = 0
+#   mf = 0
+#   for j in 1:nu
+#     bⱼ = vcat(zeros(nk[j]), b[mb+1:mb+nb[j]])
+#     fⱼ = vcat(ones(T2,1), f[mf+1:mf+nf[j]])
+#     mb += nb[j]
+#     mf += nf[j]
+#     num = conv(aᵢ, conv(dᵢ, bⱼ))
+#     den = conv(cᵢ, fⱼ)
+#     out += filt(num,den, view(u,:,j))
+#   end
+#   ma = 0
+#   for j in 1:ny
+#     if j == i
+#       ma += na[j]
+#       continue
+#     end
+#     aⱼ = vcat(zeros(T2,1), a[ma+1:ma+na[j]])
+#     ma += na[j]
+#     num = conv(aᵢ, conv(dᵢ, aⱼ))
+#     out += filt(num,cᵢ, view(y,:,j))
+#   end
+#
+#   tmp = conv(dᵢ,aᵢ)
+#   num = vcat(cᵢ, zeros(T2, length(tmp)-length(cᵢ))) - tmp
+#   out += filt(num, cᵢ, view(y,:,i))
+# end
