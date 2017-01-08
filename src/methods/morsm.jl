@@ -1,3 +1,78 @@
+function _morsm{T<:Real,A1,A2}(
+  data::IdDataObject{T,A1,A2}, model::PolyModel{S,U,OE},
+  options::IdOptions=IdOptions(estimate_initial=false))
+  estimate_initial = options.estimate_initial
+
+  y,u,N     = data.y,data.u,data.N
+  ny,nu     = data.ny, data.nu
+  maxorder  = convert(Int,min(floor(N/20),40))
+  orderh    = maxorder+2
+
+  na,nb,bf,nc,nd,nk = orders(model)
+
+  Gmodel    = OE(nb,nf,nk,)
+
+  n         = vcat(nb, nc, nd, nf, nk)
+  m         = nb+nf
+  minorder  = convert(Int,max(floor(N/1000),2*(nb+nf)))
+  orders    = convert(Array{Int},round(linspace(minorder, maxorder, nbrorders)))
+
+  modelₕ = ARX(orderh, orderh, 1)
+  Θₕ = _arx(data, modelₕ, options)
+  Aₕ = Sₕ.A
+  Bₕ = Sₕ.B
+
+  Iₗ = PolyMatrix(eye(T,ny),(ny,ny))
+
+  bestx   = zeros(T,sum(n[1:4]))
+  bestpe  = typemax(Float64)
+  for m in orders
+    bjmodel = BJ(nb,nf,nc,nd,nk,ny,nu)
+
+    Sₗ = arx(data, modelₗ, options)
+    Aₗ = Sₗ.A
+    Bₗ = Sₗ.B
+
+    # Θ = _arx(data, [m; m; nk], ARX(ic,false))[1]
+    # a = append!(ones(T,1), Θ[1:m])
+    # b = append!(zeros(T,nk), Θ[m+1:end])
+    A = PolyMatrix(vcat(eye(T,ny),      xa), (ny,ny))
+    B = PolyMatrix(vcat(zeros(T,ny,nu), xb), (ny,nu))
+
+
+    uf = filt(Aₗ,1,u)
+    if filter == :input
+      yf = filt(Bₗ, Iₗ, u)
+    else # filter == :data
+      yf = filt(Aₗ, Iₗ, y)
+    end
+    dataf = iddata(yf, uf, data.Ts)
+    ΘG    = _stmcb(dataf, Gmodel, options)
+
+    if version == :G
+      pe = cost(data, bjmodel, x[:], options)
+      pe    = calc_bj(data, n, vcat(ΘG[1:nb], ah, ΘG[nb+1:end]) , BJ(ic=ic))
+      x     = vcat(ΘG[1:nb], ΘG[nb+1:end], ah)
+    else # version == :H
+      # create noise estimate
+      yef    = filt(a,1,y) - filt(b,1,u) # vhat
+      uef    = filt(a,1,yef)             # ehat = Hhat^-1 vhat
+      dataef = iddata(yef, uef, data.Ts)
+      stmcbnoise = STMCB(ic, true, maxiter, tol)
+      ΘH,~   = _stmcb(dataef, [nc; nd; nk], stmcbnoise)
+      x      = vcat(ΘG[1:nb], ΘH[1:nc], ΘH[nc+1:end], ΘG[nb+1:end])
+      pe     = calc_bj(data, n, x, BJ(ic=ic))
+    end
+
+    if pe < bestpe
+      bestpe = pe
+      bestx  = x
+    end
+  end
+  return bestx, bestpe
+end
+
+
 
 immutable MORSM <: OneStepIdMethod
   ic::Symbol
@@ -77,16 +152,16 @@ function _getvec{T<:Real}(n::AbstractVector{Int}, x::AbstractVector{T}, method::
 end
 
 function _morsm{T<:Real,A1,A2}(
-  data::IdDataObject{T,A1,A2}, model::PolyModel{S,U,ARX},
+  data::IdDataObject{T,A1,A2}, model::PolyModel{S,U,OE},
   options::IdOptions=IdOptions(estimate_initial=false))
   estimate_initial = options.estimate_initial
 
-  filter    = method.filter
-  version   = method.version
-  loop      = method.loop
-  nbrorders = method.nbrorders
-  maxiter   = method.maxiter
-  tol       = method.tol
+  # filter    = method.filter
+  # version   = method.version
+  # loop      = method.loop
+  # nbrorders = method.nbrorders
+  # maxiter   = method.maxiter
+  # tol       = method.tol
   y, u      = data.y, data.u
   N         = size(y,1)
   maxorder  = convert(Int,min(floor(N/20),40))
@@ -98,6 +173,9 @@ function _morsm{T<:Real,A1,A2}(
   else #method.version == :H
     nb,nc,nd,nf,nk = n
   end
+  na,nb,bf,nc,nd,nk = orders(model)
+  Gmodel    = OE(nb,nf,nk)
+
   n         = vcat(nb, nc, nd, nf, nk)
   m         = nb+nf
   minorder  = convert(Int,max(floor(N/1000),2*(nb+nf)))
@@ -112,7 +190,7 @@ function _morsm{T<:Real,A1,A2}(
   # Ah      = append!(ones(T,1), ah)
   # Bh      = append!(zeros(T,nk), bh)
 
-  Sₕ = arx(data, modelₕ; options = options)
+  Sₕ = _arx(data, modelₕ, options)
   Aₕ = Sₕ.A
   Bₕ = Sₕ.B
 
@@ -121,6 +199,8 @@ function _morsm{T<:Real,A1,A2}(
   bestx   = zeros(T,sum(n[1:4]))
   bestpe  = typemax(Float64)
   for m in orders
+    bjmodel = BJ(nb,nf,nc,nd,nk,ny,nu)
+
     Sₗ = arx(data, modelₗ; options = options)
     Aₗ = Sₗ.A
     Bₗ = Sₗ.B
@@ -139,9 +219,10 @@ function _morsm{T<:Real,A1,A2}(
       yf = filt(Aₗ, Iₗ, y)
     end
     dataf = iddata(yf, uf, data.Ts)
-    ΘG, pe  = _stmcb(dataf, [nb; nf; nk], STMCB(ic, false, maxiter, tol))
+    ΘG    = _stmcb(dataf, Gmodel, options)
 
     if version == :G
+      pe = cost(data, bjmodel, x[:], options)
       pe    = calc_bj(data, n, vcat(ΘG[1:nb], ah, ΘG[nb+1:end]) , BJ(ic=ic))
       x     = vcat(ΘG[1:nb], ΘG[nb+1:end], ah)
     else # version == :H

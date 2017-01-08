@@ -69,7 +69,7 @@ data2 = iddata(y, u)
 ny = size(u,2)
 nu = size(y,2)
 
-model = OE(nb,nf,[1,1],ny,nu)
+model = OE(nb,nf,[1],ny,nu)
 model2 = OE(nb,nf,[1],ny,nu)
 orders(model)
 
@@ -197,14 +197,14 @@ nb = nf = 10
 N  = 200
 u1 = 1*randn(N)
 u2 = 1*randn(N)
-lambda = 0.0001
+lambda = 0.1
 e1 = sqrt(lambda)*randn(N)
 e2 = sqrt(lambda)*randn(N)
 y1 = filt(B,F,u1) + 0.*filt(B,F,u2) + e1
 y2 = 0.1*filt(B,F,u1) + filt(B,F,u2) + e2
 
 u = hcat(u1,u2)
-y = hcat(y1,y2)
+y = hcat(y1)
 data2 = iddata(y, u)
 
 ny = size(y,2)
@@ -212,41 +212,27 @@ nu = size(u,2)
 
 
 mna = ones(Int,ny,ny)
-mnb = ones(Int,ny,nu)
-mnf = ones(Int,ny,nu)
-mnc = 0*ones(Int,ny)
-mnd = 0*ones(Int,ny)
+mnb = 5*ones(Int,ny,nu)
+mnf = 5*ones(Int,ny,nu)
+mnc = 2*ones(Int,ny)
+mnd = 2*ones(Int,ny)
 mnk = ones(Int,ny,nu)
 order = MPolyOrder(mna,mnb,mnf,mnc,mnd,mnk)
 model = PolyModel(order, ny, nu, ControlCore.Siso{false}, CUSTOM)
 nparam = sum(mna) + sum(mnb) + sum(mnf) + sum(mnc) + sum(mnd)
 x = zeros(nparam)
-x[5] = b[1]
-x[9] = f[1]
+x[1] = x[5] = 0.2
+x[9] = x[13] = 0.4
 
 x
+sum(mnf)
 
 predict(data2,model,x)
 cost(data2,model,x)
-pem(data2,model,x)
 
-
-y
-
-
-
-
-
-
-
-a = randn(20)
-b = randn(1000)
-p1 = Poly(a)
-p2 = Poly(b)
-using BenchmarkTools
-
-@benchmark p1*p2
-@benchmark _poly_mul1(a,b)
-@benchmark _poly_mul2(a,b)
-@benchmark _poly_mul3(a,b)
-@benchmark _poly_mul4(a,b)
+options2 = IdOptions(f_tol=1e-64, extended_trace=false, iterations = 10, autodiff=true, show_trace=true, estimate_initial=false)
+@time sys2 = pem(data2,model,x,options2)
+sys2.info.opt
+sys2.info.mse
+sys2.B
+sys2.F

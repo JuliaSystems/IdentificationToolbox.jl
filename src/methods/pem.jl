@@ -58,7 +58,6 @@ function pem{S<:PolyModel, T1<:Real, T2<:Real,V1,V2}(
   idinfo    = IterativeIdInfo(mse, modelfit, opt, model)
   Θₚ,icbf,icdc,iccda = _split_params(model, opt.minimizer, options)
   A,B,F,C,D = _getpolys(model, Θₚ)
-
   IdMFD(A,B,F,C,D,data.Ts,idinfo)
 end
 
@@ -162,6 +161,17 @@ cost{T}(y::AbstractArray{T}, y_est, N::Int, options::IdOptions) =
 
 function _getpolys{T<:Real,S,M}(model::PolyModel{S,
     MPolyOrder,M}, Θ::Vector{T})
+  a,b,f,c,d = _getmatrix(model, Θ)
+  A = map(x->Poly(x),a)  |> PolyMatrix
+  B = map(x->Poly(x),b)  |> PolyMatrix
+  F = map(x->Poly(x),f)  |> PolyMatrix
+  C = map(x->Poly(x), c) |> diagm |> PolyMatrix
+  D = map(x->Poly(x), d) |> diagm |> PolyMatrix
+  return A,B,F,C,D
+end
+
+function _getmatrix{T<:Real,S,M}(model::PolyModel{S,
+    MPolyOrder,M}, Θ::Vector{T})
   na,nb,nf,nc,nd,nk = orders(model)
   ny,nu             = model.ny,model.nu
   Na,Nb,Nf,Nc,Nd    = sum(na),sum(nb),sum(nf),sum(nc),sum(nd)
@@ -182,25 +192,34 @@ function _getpolys{T<:Real,S,M}(model::PolyModel{S,
   for i = 1:ny
     for j = 1:ny
       if i == j
-        A[i,j] = vcat(ones(T,1), a[ma+1:na[i,j]])
-        C[i]   = vcat(ones(T,1), a[ma+1:na[i,j]])
-        D[i]   = vcat(ones(T,1), a[ma+1:na[i,j]])
+        A[i,j] = vcat(ones(T,1), a[ma+(1:na[i,j])])
+        C[i]   = vcat(ones(T,1), a[ma+(1:na[i,j])])
+        D[i]   = vcat(ones(T,1), a[ma+(1:na[i,j])])
         ma  += na[i,j]
         mc  += nc[i]
         md  += nd[i]
       else
-        A[i,j] = vcat(zeros(T,1), a[ma+1:na[i,j]])
+        A[i,j] = vcat(zeros(T,1), a[ma+(1:na[i,j])])
         ma += na[i,j]
       end
     end
     for j = 1:nu
-      B[i,j] = vcat(zeros(T,nk[i,j]), b[mb+1:nb[i,j]])
-      F[i,j] = vcat(ones(T,1), f[mf+1:nf[i,j]])
+      B[i,j] = vcat(zeros(T,nk[i,j]), b[mb+(1:nb[i,j])])
+      F[i,j] = vcat(ones(T,1), f[mf+(1:nf[i,j])])
       mb    += nb[i,j]
       mf    += nf[i,j]
     end
   end
   return A,B,F,C,D
+end
+
+function _split_params{S,M,O,T}(model::PolyModel{S,MPolyOrder,M}, Θ::AbstractArray{T}, options::IdOptions{O})
+  na,nb,nf,nc,nd,nk = orders(model)
+
+  icbf  = zeros(T,0,0)
+  icdc  = zeros(T,0,0)
+  iccda = zeros(T,0,0)
+  return Θ, icbf, icdc, iccda
 end
 
 function predict{T1,A1,A2,S,P,T2,O}(data::IdDataObject{T1,A1,A2},
@@ -209,7 +228,7 @@ function predict{T1,A1,A2,S,P,T2,O}(data::IdDataObject{T1,A1,A2},
   na,nb,nf,nc,nd,nk  = orders(model)
   N,ny,nu            = data.N,data.ny,data.nu
   Na,Nb,Nf,Nc,Nd     = sum(na),sum(nb),sum(nf),sum(nc),sum(nd)
-  a,b,f,c,d          = _getpolys(model, Θ)
+  a,b,f,c,d          = _getmatrix(model, Θ)
   T = promote_type(T1,T2)
 
   out = zeros(T, N, ny)
