@@ -212,11 +212,11 @@ function _delaycheck(nk, nu::Int)
   end
 end
 
-function orders(model::PolyModel)
+function orders{P<:PolyModel}(model::P)
   return orders(model.orders)
 end
 
-function orders(order::AbstractModelOrder)
+function orders{O<:AbstractModelOrder}(order::O)
   return order.na, order.nb, order.nf, order.nc, order.nd, order.nk
 end
 

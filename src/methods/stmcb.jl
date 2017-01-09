@@ -57,8 +57,6 @@ function _stmcb{T,A1,A2,S,U}(
   bestpe = cost(data, bjmodel, x[:], options)
   Θp     = Θ
 
-  println(bestpe)
-
   # filter data
   xf    = _blocktranspose(bestf, ny, ny, nf)
   F     = PolyMatrix(vcat(eye(T,ny),xf), (ny,ny))

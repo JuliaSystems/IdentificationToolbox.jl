@@ -157,7 +157,7 @@ function _filt_iir!{T,S,G}(out::AbstractArray{T}, b::PolyMatrix{T},
 end
 
 function _filt_fir!{T}(
-  out::AbstractMatrix{T}, b::PolyMatrix{T}, x, si)
+  out::AbstractMatrix{T}, b::PolyMatrix{T}, x, si=zeros(T, order(b), size(b,1)))
   silen = size(si,1)
   bc = coeffs(b)
   @inbounds @simd for i=1:size(x, 1)
@@ -170,6 +170,22 @@ function _filt_fir!{T}(
     out[i,:] = val
   end
 end
+
+# # filt with data in rows instead of columns! which is the efficient way to do it!
+# function _filt_fir2!{T}(
+#   out::AbstractMatrix{T}, b::PolyMatrix{T}, x, si=zeros(T, order(b), size(b,1)))
+#   silen = size(si,1)
+#   bc = coeffs(b)
+#   @inbounds @simd for i=1:size(x, 1)
+#     xi = view(x,:,i)
+#     val = si[1,:] + bc[0]*xi
+#     for j=1:(silen-1)
+#       si[j,:] = si[j+1,:] + bc[j]*xi
+#     end
+#     si[silen,:] = bc[silen]*xi
+#     out[:,i] = val
+#   end
+# end
 
 # polynomial filtering
 function filt{T,S,G}(b::Poly{T}, a::Poly{S},

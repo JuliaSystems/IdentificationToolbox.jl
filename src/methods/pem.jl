@@ -98,7 +98,7 @@ function _mse{T<:Real,S<:PolyModel, O}(data::IdDataObject{T}, model::S, x, optio
   y     = data.y
   N     = size(y,1)
   y_est = predict(data, model, x, options)
-  sumabs2(y-y_est,1)[:]/N
+  sumabs2(y-y_est,1)[:]/2N
 end
 
 function _modelfit{T<:Real}(mse, y::AbstractVector{T})
@@ -142,7 +142,7 @@ function _split_params{S,U,M,O,T}(model::PolyModel{S,U,M}, Θ::AbstractArray{T},
   Θₚ = Θ[1:m]
   Θᵢ = options.estimate_initial ? Θ[m+1:m+mi] : zeros(T,mi)
   icbf  = nbf > 0  ? reshape(Θᵢ[1:nbf*ny], nbf, ny)                  : zeros(T,0,0)
-  icdc  = ndc > 0  ? reshape(Θᵢ[nbf*ny+(1:ndc*ny)], nbf, ny)         : zeros(T,0,0)
+  icdc  = ndc > 0  ? reshape(Θᵢ[nbf*ny+(1:ndc*ny)], ndc, ny)         : zeros(T,0,0)
   iccda = ncda > 0 ? reshape(Θᵢ[(nbf+ndc)*ny+(1:ncda*ny)], ncda, ny) : zeros(T,0,0)
   return Θₚ, icbf, icdc, iccda
 end

@@ -23,9 +23,9 @@ immutable IdDataObject{T<:Real,V1<:AbstractArray{T},V2<:AbstractArray{T}}
     ny::Int
 
     @compat function (::Type{IdDataObject}){T}(y::AbstractArray{T}, u::AbstractArray{T}, Ts::Float64)
-        N   = size(y, 1);
-        ny  = size(y, 2);
-        nu  = size(u, 2);
+        N   = size(y, 1)
+        ny  = size(y, 2)
+        nu  = size(u, 2)
 
         # Validating amount of samples
         if size(y, 1) != size(u, 1)

@@ -63,7 +63,7 @@ include("methods/pem.jl")
 include("methods/siso_poly_pem.jl")
 include("methods/arx.jl")
 include("methods/stmcb.jl")
-#include("methods/morsm.jl")
+include("methods/morsm.jl")
 #include("methods/n4sid.jl")
 
 end # module
