@@ -6,7 +6,7 @@ function _morsm{T<:Real,A1,A2,S,U}(
   y,u,N     = data.y,data.u,data.N
   ny,nu     = data.ny, data.nu
   ny == 1 || error("morsm: ny == 1 only supported")
-  maxorder  = convert(Int,min(floor(N/20),40))
+  maxorder  = convert(Int,min(floor(N/5),40))
   orderh    = maxorder+2
 
   na,nb,bf,nc,nd,nk = orders(model)
@@ -18,7 +18,7 @@ function _morsm{T<:Real,A1,A2,S,U}(
 
   Gmodel    = OE(nb,nf,nk)
 
-  minorder  = convert(Int,max(floor(N/1000),2*(nb+nf)))
+  minorder  = convert(Int,max(floor(N/1000),(nb+nf)))
   nbrorders = 50
   ordervec  = convert(Array{Int},round(linspace(minorder, maxorder, nbrorders)))
   println(ordervec)
@@ -51,7 +51,7 @@ function _morsm{T<:Real,A1,A2,S,U}(
     Bₗ  = PolyMatrix(vcat(zeros(T,ny,nu), _blocktranspose(xbₗ, ny, nu, m)), (ny,nu))
 
     _filt_fir!(uf, Aₗ, u)
-    if filter == :input
+    if 1 == 1 #filter == :input
       _filt_fir!(yf, Bₗ, u)
     else # filter == :data
       _filt_fir!(yf, Aₗ, y)
@@ -62,6 +62,7 @@ function _morsm{T<:Real,A1,A2,S,U}(
     if 1 == 1
       xg = reshape(ΘG, mₗ, ny)
       x   = vcat(xg, xaₕ) |> vec
+      #bjmodel = BJ(nb,nf,0,m,nk,ny,nu)
       pe  = cost(data, bjmodel, x, options)
       println("x: $(x[1:2]), pe: $pe")
     else # version == :H
@@ -75,10 +76,10 @@ function _morsm{T<:Real,A1,A2,S,U}(
       pe     = calc_bj(data, n, x, BJ(ic=ic))
     end
 
-    if pe < bestpe
+    #if pe < bestpe
       bestpe = pe
       bestx  = x
-    end
+    #end
   end
   return bestx, bestpe
 end

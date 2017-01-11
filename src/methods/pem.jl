@@ -72,7 +72,7 @@ end
 
 function _getpolys{T<:Real,S,M}(model::PolyModel{S,
     FullPolyOrder{S},M}, x::Vector{T})
-  na,nb,nf,nc,nd = orders(model)
+  na,nb,nf,nc,nd,nk = orders(model)
   ny,nu = model.ny, model.nu
 
   m  = ny*(na+nf+nc+nd)+nu*nb
@@ -85,11 +85,11 @@ function _getpolys{T<:Real,S,M}(model::PolyModel{S,
   xd = _blocktranspose(view(xr, ny*(na+nf+nc)+nu*nb+(1:ny*nd), :), ny, ny, nd)
 
   # zero pad vectors
-  A = PolyMatrix(vcat(eye(T,ny),      xa), (ny,ny))
-  B = PolyMatrix(vcat(zeros(T,ny,nu), xb), (ny,nu))
-  F = PolyMatrix(vcat(eye(T,ny),      xf), (ny,ny))
-  C = PolyMatrix(vcat(eye(T,ny),      xc), (ny,ny))
-  D = PolyMatrix(vcat(eye(T,ny),      xd), (ny,ny))
+  A = PolyMatrix(vcat(eye(T,ny),         xa), (ny,ny))
+  B = PolyMatrix(vcat(zeros(T,ny*nk[1],nu), xb), (ny,nu)) # TODO fix nk
+  F = PolyMatrix(vcat(eye(T,ny),         xf), (ny,ny))
+  C = PolyMatrix(vcat(eye(T,ny),         xc), (ny,ny))
+  D = PolyMatrix(vcat(eye(T,ny),         xd), (ny,ny))
 
   return A,B,F,C,D
 end
@@ -140,7 +140,7 @@ function _split_params{S,U,M,O,T}(model::PolyModel{S,U,M}, Θ::AbstractArray{T},
 
   Θₚ = Θ[1:m]
   Θᵢ = options.estimate_initial ? Θ[m+1:m+mi] : zeros(T,mi)
-  icbf  = nbf > 0  ? reshape(Θᵢ[1:nbf*ny], ny, nbf)                  : zeros(T,0,0)
+  icbf  = nbf > 0  ? reshape(Θᵢ[1:nbf*ny], ny*nk[1], nbf)            : zeros(T,0,0)  # TODO fix nk
   icdc  = ndc > 0  ? reshape(Θᵢ[nbf*ny+(1:ndc*ny)], ny, ndc)         : zeros(T,0,0)
   iccda = ncda > 0 ? reshape(Θᵢ[(nbf+ndc)*ny+(1:ncda*ny)], ny, ncda) : zeros(T,0,0)
   return Θₚ, icbf, icdc, iccda

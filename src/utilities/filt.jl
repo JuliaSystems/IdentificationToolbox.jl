@@ -217,7 +217,7 @@ function _filt_ar!{T,S}(
   end
 end
 
-function filt{T,S,G}(b::T, a::PolyMatrix{S},
+function filt{T,S,G}(b::AbstractMatrix{T}, a::PolyMatrix{S},
   x::AbstractArray{G}, si=zeros(promote_type(S, G, T), degree(a), size(a,1)))
   out = Array(promote_type(T, G, S), size(x,1), size(x,2))
   _filt_ar!(out, a, x, si)  # TODO should be a/b

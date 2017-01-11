@@ -52,15 +52,16 @@ B = [0; b]
 F = [1; f]
 
 nb = nf = 3
+nk = 1
 
-N  = 1000
+N  = 2000
 u1 = randn(N)
 u2 = randn(N)
-lambda = 0.001
+lambda = 0.0001
 e1 = sqrt(lambda)*randn(N)
 e2 = sqrt(lambda)*randn(N)
-y1 = filt(B,F,u1) + 0.*filt(B,F,u2) + e1
-y2 = 0.1*filt(B,F,u1) + filt(B,F,u2) + e2
+y1 = filt(B,F,u1) + 0.*filt(B,F,u2) + filt([1.,0.1], [1, 0.7], e1)
+y2 = 0.1*filt(B,F,u1) + filt(B,F,u2) + filt([1.,0.1], [1, 0.7], e2)
 
 u = hcat(u1).'
 y = hcat(y1).'
@@ -93,35 +94,64 @@ options = IdOptions(extended_trace=false, iterations = 100, autodiff=true, show_
 cost(data2, model, x0, options)
 
 @time sys1 = pem(data2, model, x0 + 0.01*randn(length(x0)), options) # , IdOptions(f_tol = 1e-32)
-sys1.B
-sys1.F
+B1 = sys1.B
+F1 = sys1.F
 sys1.info.opt
 sys1.info.mse
 fieldnames(sys1.info.opt.trace[1].metadata)
 sys1.info.opt.trace[1]
 
-options2 = IdOptions(f_tol=1e-64, extended_trace=false, iterations = 9, autodiff=true, show_trace=true, estimate_initial=false)
+options2 = IdOptions(f_tol=1e-64, extended_trace=false, iterations = 1, autodiff=true, show_trace=true, estimate_initial=false)
 #_stmcb(data2,model,options2)
 @time sys2 = stmcb(data2,model,options2)
-sys2.B
-sys2.F
+B2 = sys2.B
+F2 = sys2.F
 sys2.info.mse
 
 
 @time x,pe = _morsm(data2,model,options2)
-B = PolyMatrix([Poly(x[1:nb])])
-F = PolyMatrix([Poly(x[nb+(1:nf)])])
+Bm = PolyMatrix(hcat([Poly(x[1:nb])]))
+Fm = PolyMatrix(hcat([Poly(x[nb+(1:nf)])]))
 
+uz    = zeros(nu,100)
+uz[1] = 1.0
+g1 = filt(B1,F1,uz)
+g2 = filt(B2,F2,uz)
+gl = filt(Bₗ,Aₗ,uz)
+gm = filt(Bm,Fm,uz)
+gt = filt(B,F,uz.').'
+
+norm(g1-gt)/norm(gt)
+norm(g2-gt)/norm(gt)
+norm(gl-gt)/norm(gt)
+norm(gm-gt)/norm(gt)
 
 @time begin
-  m = 50
-  Θₗ  = _arx(data2, ARX(m,m,1), options2)[1]
+  m  = 10
+  Θₗ  = _arx(dataf, ARX(m,m,1), options2)[1]
   xr  = reshape(Θₗ, ny*m+nu*m, ny) # [1:(ny*m+nu*m)*ny]
   xaₗ = view(xr, 1:ny*m, :)
   xbₗ = view(xr, ny*m+(1:nu*m), :)
   Aₗ  = PolyMatrix(vcat(eye(ny),      _blocktranspose(xaₗ, ny, ny, m)), (ny,ny))
   Bₗ  = PolyMatrix(vcat(zeros(ny,nu), _blocktranspose(xbₗ, ny, nu, m)), (ny,nu))
 end
+
+uf = similar(u)
+_filt_fir!(uf, Aₗ, u)
+yf = similar(y)
+_filt_fir!(yf, Bₗ, u)
+yf
+dataf = iddata(yf,uf,1.0)
+
+
+bjmodel = BJ(nb,nf,0,m,1,ny,nu)
+a,b,f,c,d = _getpolys(bjmodel, xb)
+xb  = vcat(x[1:nb+nf], xaₗ) |> vec
+predict(data2, bjmodel, xb, options2)
+y
+pe  = cost(data2, bjmodel, xb, options2)
+pe  = cost(data2, bjmodel, xb, options2)
+
 
 Aₗ
 uz    = zeros(nu,100)
@@ -158,8 +188,7 @@ g2 = filt(sys2.B,sys2.F,uz)
 g1 = filt(B,F,uz).'
 gt = filt(B,F,uz)
 
-norm(g2-gt)
-norm(g1-gt)
+
 
 b2 = zeros(ny,nu*nb)
 for i = 1:nb
