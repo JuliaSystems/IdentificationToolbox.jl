@@ -51,23 +51,23 @@ f = [0.5]
 B = [0; b]
 F = [1; f]
 
-nb = nf = 1
+nb = nf = 3
 
 N  = 1000
 u1 = randn(N)
 u2 = randn(N)
-lambda = 0.1
+lambda = 0.001
 e1 = sqrt(lambda)*randn(N)
 e2 = sqrt(lambda)*randn(N)
 y1 = filt(B,F,u1) + 0.*filt(B,F,u2) + e1
 y2 = 0.1*filt(B,F,u1) + filt(B,F,u2) + e2
 
-u = hcat(u1)
-y = hcat(y1)
+u = hcat(u1).'
+y = hcat(y1).'
 data2 = iddata(y, u)
 
-ny = size(u,2)
-nu = size(y,2)
+nu = size(u,1)
+ny = size(y,1)
 
 model = OE(nb,nf,[1],ny,nu)
 model2 = OE(nb,nf,[1],ny,nu)
@@ -77,8 +77,10 @@ m = nf*ny^2+nb*nu*ny
 randn(m)
 m0 = max(nb,nf)*ny
 
+@time predict(data2, model, randn(m+m0))
 cost(data2, model, randn(m+m0))
 _mse(data2, model, randn(m+m0))
+
 
 psi = psit(data2, model, randn(m+m0))
 orders(model)
@@ -87,25 +89,29 @@ x0 = vcat(b[1]*ones(nu,ny), zeros((nb-1)*nu,ny), f[1]*eye(ny), zeros((nf-1)*ny,n
 #x0 = vcat(b[1]*ones(nu,ny), b[2]*ones(nu,ny), b[3]*ones(nu,ny), f[1]*eye(ny), f[2]*eye(ny), f[3]*eye(ny))[:]
 x0 = vcat(x0,zeros(m0))
 
-options = IdOptions(extended_trace=false, iterations = 10, autodiff=false, show_trace=true, estimate_initial=false)
+options = IdOptions(extended_trace=false, iterations = 100, autodiff=true, show_trace=true, estimate_initial=false)
 cost(data2, model, x0, options)
 
-# @time sys1 = pem(data2, model, x0 + 0.1*randn(length(x0)), options) # , IdOptions(f_tol = 1e-32)
-# sys1.B
-# sys1.F
-# sys1.info.opt
-# sys1.info.mse
-# fieldnames(sys1.info.opt.trace[1].metadata)
-# sys1.info.opt.trace[1]
+@time sys1 = pem(data2, model, x0 + 0.01*randn(length(x0)), options) # , IdOptions(f_tol = 1e-32)
+sys1.B
+sys1.F
+sys1.info.opt
+sys1.info.mse
+fieldnames(sys1.info.opt.trace[1].metadata)
+sys1.info.opt.trace[1]
 
-options2 = IdOptions(f_tol=1e-64, extended_trace=false, iterations = 1, autodiff=true, show_trace=true, estimate_initial=false)
+options2 = IdOptions(f_tol=1e-64, extended_trace=false, iterations = 9, autodiff=true, show_trace=true, estimate_initial=false)
 #_stmcb(data2,model,options2)
 @time sys2 = stmcb(data2,model,options2)
 sys2.B
 sys2.F
 sys2.info.mse
 
+
 @time x,pe = _morsm(data2,model,options2)
+B = PolyMatrix([Poly(x[1:nb])])
+F = PolyMatrix([Poly(x[nb+(1:nf)])])
+
 
 @time begin
   m = 50
@@ -117,11 +123,23 @@ sys2.info.mse
   Bₗ  = PolyMatrix(vcat(zeros(ny,nu), _blocktranspose(xbₗ, ny, nu, m)), (ny,nu))
 end
 
-out = similar(y)
-@time _filt_fir!(out,Bₗ,y)
+Aₗ
+uz    = zeros(nu,100)
+uz[1] = 1.0
+g2 = filt(Bₗ,Aₗ,uz)
+g1 = filt(B,F,uz)
+gt = filt(B,F,uz)
+
+a,b,f,c,d          = _getpolys(model, x0)
+out = zeros(y)
+@time _filt_fir!(out,b,y)
+filt!(out,b,f,u1)
+out
+b
+y1
 y2 = randn(1,N)
 out2 = similar(y2)
-@time _filt_fir2!(out2,Bₗ,y2)
+@time _filt_fir!(out2,b,y2)
 
 uf = similar(u)
 @time _filt_fir!(uf, Aₗ, u)
@@ -129,15 +147,15 @@ uf = similar(u)
 bjmodel = BJ(nb,nf,0,12,1,ny,nu)
 
 
-x2 = vcat(x[1],x[2], zeros(12))
+x2 = vcat(x0[1],x0[2], zeros(12))
 cost(data2,bjmodel,x[:],options2)
 cost(data2,model,x2,options2)
-_mse(data2,model,x[1:2],options2)
+_mse(data2,model,x0[1:2],options2)
 
-uz    = zeros(100,nu)
+uz    = zeros(nu,100)
 uz[1] = 1.0
 g2 = filt(sys2.B,sys2.F,uz)
-g1 = filt(sys1.B,sys1.F,uz)
+g1 = filt(B,F,uz).'
 gt = filt(B,F,uz)
 
 norm(g2-gt)

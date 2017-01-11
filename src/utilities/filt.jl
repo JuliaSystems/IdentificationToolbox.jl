@@ -78,20 +78,20 @@ function filt!{M<:AbstractArray,T,S,N}(
 end
 
 function _zerosi{S,G}(b::PolyMatrix{S}, a::PolyMatrix{G}, T)
-  m  = max(order(a), order(b))
-  si = zeros(promote_type(S, G, T), m, size(a,1))
+  m  = max(degree(a), degree(b))
+  si = zeros(promote_type(S, G, T), size(a,1), m)
 end
 
-function filt{T,S,G}(b::PolyMatrix{T}, a::PolyMatrix{S},
+function filt{T,S,M1,M2,O,N,G}(b::PolyMatrix{T,M1,O,N}, a::PolyMatrix{S,M2,O,N},
   x::AbstractArray{G}, si=_zerosi(b, a, G))
-  filt!(Array(promote_type(T, G, S), size(x,1),size(a,2)), b, a, x, si)
+  filt!(Array(promote_type(T, G, S), size(a,1), size(x,2)), b, a, x, si)
 end
 
-function filt!{H,T,S,G}(out::AbstractArray{H}, b::PolyMatrix{T},
-  a::PolyMatrix{S}, x::AbstractArray{G}, si=_zerosi(b, a, G))
+function filt!{H,T,S,M1,M2,O,N,G}(out::AbstractArray{H}, b::PolyMatrix{T,M1,O,N},
+  a::PolyMatrix{S,M2,O,N}, x::AbstractArray{G}, si=_zerosi(b, a, G))
 
-  as = order(a)
-  bs = order(b)
+  as = degree(a)
+  bs = degree(b)
   sz = max(as, bs)
   if as == 0
     if bs == 0
@@ -104,7 +104,7 @@ function filt!{H,T,S,G}(out::AbstractArray{H}, b::PolyMatrix{T},
   end
   sz = max(as, bs)
   silen = sz
-  if size(si, 1) != silen
+  if size(si, 2) != silen
       throw(ArgumentError("initial state vector si must have max(length(a),length(b))-1 columns"))
   end
 
@@ -139,53 +139,53 @@ function filt!{H,T,S,G}(out::AbstractArray{H}, b::PolyMatrix{T},
   return out
 end
 
-function _filt_iir!{T,S,G}(out::AbstractArray{T}, b::PolyMatrix{T},
-  a::PolyMatrix{T}, x::AbstractArray{S}, si::AbstractArray{G})
-  silen = size(si,1)
+function _filt_iir!{T,S,M1,M2,O,N,G}(out::AbstractArray{T}, b::PolyMatrix{T,M1,O,N},
+  a::PolyMatrix{T,M2,O,N}, x::AbstractArray{S}, si::AbstractArray{G})
+  silen = size(si,2)
   bc = coeffs(b)
   ac = coeffs(a)
-  val = zeros(T,1,size(a,2))
-  @inbounds @simd for i=1:size(x, 1)
-    xi = view(x,i,:)
-    val = si[1,:] + bc[0]*xi
+  val = zeros(G,size(a,1),1)
+  @inbounds @simd for i=1:size(x, 2)
+    xi = view(x,:,i)
+    val = si[:,1] + bc[0]*xi
     for j=1:(silen-1)
-       si[j,:] = si[j+1,:,] + bc[j]*xi - ac[j]*val
+       si[:,j] = si[:,j+1,] + bc[j]*xi - ac[j]*val
     end
-    si[silen,:] = bc[silen]*xi - ac[silen]*val
-    out[i,:] = val
+    si[:,silen] = bc[silen]*xi - ac[silen]*val
+    out[:,i] = val
   end
 end
 
-function _filt_fir!{T}(
-  out::AbstractMatrix{T}, b::PolyMatrix{T}, x, si=zeros(T, order(b), size(b,1)))
-  silen = size(si,1)
-  bc = coeffs(b)
-  @inbounds @simd for i=1:size(x, 1)
-    xi = view(x,i,:)
-    val = si[1,:] + bc[0]*xi
-    for j=1:(silen-1)
-      si[j,:] = si[j+1,:] + bc[j]*xi
-    end
-    si[silen,:] = bc[silen]*xi
-    out[i,:] = val
-  end
-end
-
-# # filt with data in rows instead of columns! which is the efficient way to do it!
-# function _filt_fir2!{T}(
-#   out::AbstractMatrix{T}, b::PolyMatrix{T}, x, si=zeros(T, order(b), size(b,1)))
+# function _filt_fir!{T}(
+#   out::AbstractMatrix{T}, b::PolyMatrix{T}, x, si=zeros(T, degree(b), size(b,1)))
 #   silen = size(si,1)
 #   bc = coeffs(b)
 #   @inbounds @simd for i=1:size(x, 1)
-#     xi = view(x,:,i)
+#     xi = view(x,i,:)
 #     val = si[1,:] + bc[0]*xi
 #     for j=1:(silen-1)
 #       si[j,:] = si[j+1,:] + bc[j]*xi
 #     end
 #     si[silen,:] = bc[silen]*xi
-#     out[:,i] = val
+#     out[i,:] = val
 #   end
 # end
+
+# # filt with data in rows instead of columns! which is the efficient way to do it!
+function _filt_fir!{T,M1,O,N}(
+  out::AbstractMatrix{T}, b::PolyMatrix{T,M1,O,N}, x, si=zeros(T, size(b,1), degree(b)))
+  silen = size(si,2)
+  bc = coeffs(b)
+  @inbounds @simd for i=1:size(x, 2)
+    xi = view(x,:,i)
+    val = si[:,1] + bc[0]*xi
+    for j=1:(silen-1)
+      si[:,j] = si[:,j+1] + bc[j]*xi
+    end
+    si[:,silen] = bc[silen]*xi
+    out[:,i] = val
+  end
+end
 
 # polynomial filtering
 function filt{T,S,G}(b::Poly{T}, a::Poly{S},
@@ -218,14 +218,14 @@ function _filt_ar!{T,S}(
 end
 
 function filt{T,S,G}(b::T, a::PolyMatrix{S},
-  x::AbstractArray{G}, si=zeros(promote_type(S, G, T), order(a), size(a,1)))
+  x::AbstractArray{G}, si=zeros(promote_type(S, G, T), degree(a), size(a,1)))
   out = Array(promote_type(T, G, S), size(x,1), size(x,2))
   _filt_ar!(out, a, x, si)  # TODO should be a/b
   return out
 end
 
-function _filt_ar!{T,S}(
-  out::AbstractMatrix{T}, a::PolyMatrix{T},
+function _filt_ar!{T,S,M1,O,N}(
+  out::AbstractMatrix{T}, a::PolyMatrix{T,M1,O,N},
   x::AbstractArray{T}, si::AbstractMatrix{S})
   silen = size(si,1)
   ac = coeffs(a)

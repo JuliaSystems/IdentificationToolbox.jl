@@ -20,20 +20,20 @@ function _morsm{T<:Real,A1,A2,S,U}(
 
   minorder  = convert(Int,max(floor(N/1000),2*(nb+nf)))
   nbrorders = 50
-  ordervec    = convert(Array{Int},round(linspace(minorder, maxorder, nbrorders)))
+  ordervec  = convert(Array{Int},round(linspace(minorder, maxorder, nbrorders)))
   println(ordervec)
 
   modelₕ = ARX(orderh, orderh, 1)
   Θₕ, peharx = _arx(data, modelₕ, options)
   println("pe HARX: ", peharx)
 
-  mₕ = ny*orderh+nu*orderh
-  xr = reshape(Θₕ[1:mₕ*ny], mₕ, ny)
+  mₕ  = ny*orderh+nu*orderh
+  xr  = reshape(Θₕ[1:mₕ*ny], mₕ, ny)
   xaₕ = view(xr, 1:ny*orderh, :)
   xbₕ = view(xr, ny*orderh+(1:nu*orderh), :)
-  Aₕ = PolyMatrix(vcat(eye(T,ny),      _blocktranspose(xaₕ, ny, ny, orderh)), (ny,ny))
-  Bₕ = PolyMatrix(vcat(zeros(T,ny,nu), _blocktranspose(xbₕ, ny, nu, orderh)), (ny,nu))
-  Iₗ = PolyMatrix(eye(T,ny),(ny,ny))
+  Aₕ  = PolyMatrix(vcat(eye(T,ny),      _blocktranspose(xaₕ, ny, ny, orderh)), (ny,ny))
+  Bₕ  = PolyMatrix(vcat(zeros(T,ny,nu), _blocktranspose(xbₕ, ny, nu, orderh)), (ny,nu))
+  Iₗ  = PolyMatrix(eye(T,ny),(ny,ny))
 
   yf = similar(y)
   uf = similar(u)
@@ -63,6 +63,7 @@ function _morsm{T<:Real,A1,A2,S,U}(
       xg = reshape(ΘG, mₗ, ny)
       x   = vcat(xg, xaₕ) |> vec
       pe  = cost(data, bjmodel, x, options)
+      println("x: $(x[1:2]), pe: $pe")
     else # version == :H
       # create noise estimate
       yef    = filt(Aₗ, Iₗ, yf) - filt(b,1,u) # vhat

@@ -95,10 +95,9 @@ function _getpolys{T<:Real,S,M}(model::PolyModel{S,
 end
 
 function _mse{T<:Real,S<:PolyModel, O}(data::IdDataObject{T}, model::S, x, options::IdOptions{O}=IdOptions())
-  y     = data.y
-  N     = size(y,1)
+  y,N     = data.y,data.N
   y_est = predict(data, model, x, options)
-  sumabs2(y-y_est,1)[:]/2N
+  sumabs2(y-y_est,2)[:]/2N
 end
 
 function _modelfit{T<:Real}(mse, y::AbstractVector{T})
@@ -107,8 +106,8 @@ function _modelfit{T<:Real}(mse, y::AbstractVector{T})
 end
 
 function _modelfit{T<:Real}(mse, y::AbstractMatrix{T})
-  ny = size(y,2)
-  modelfit = [100*(1 - mse[i]/cov(y[1:N,i])) for i in 1:ny] # TODO fix to correct order m y[m:N]
+  ny = size(y,1)
+  modelfit = [100*(1 - mse[i]/cov(y[i,1:N])) for i in 1:ny] # TODO fix to correct order m y[m:N]
 end
 
 function predict{T1,V1,V2,S,U,M,T2,O}(data::IdDataObject{T1,V1,V2},
@@ -141,9 +140,9 @@ function _split_params{S,U,M,O,T}(model::PolyModel{S,U,M}, Θ::AbstractArray{T},
 
   Θₚ = Θ[1:m]
   Θᵢ = options.estimate_initial ? Θ[m+1:m+mi] : zeros(T,mi)
-  icbf  = nbf > 0  ? reshape(Θᵢ[1:nbf*ny], nbf, ny)                  : zeros(T,0,0)
-  icdc  = ndc > 0  ? reshape(Θᵢ[nbf*ny+(1:ndc*ny)], ndc, ny)         : zeros(T,0,0)
-  iccda = ncda > 0 ? reshape(Θᵢ[(nbf+ndc)*ny+(1:ncda*ny)], ncda, ny) : zeros(T,0,0)
+  icbf  = nbf > 0  ? reshape(Θᵢ[1:nbf*ny], ny, nbf)                  : zeros(T,0,0)
+  icdc  = ndc > 0  ? reshape(Θᵢ[nbf*ny+(1:ndc*ny)], ny, ndc)         : zeros(T,0,0)
+  iccda = ncda > 0 ? reshape(Θᵢ[(nbf+ndc)*ny+(1:ncda*ny)], ny, ncda) : zeros(T,0,0)
   return Θₚ, icbf, icdc, iccda
 end
 

@@ -23,12 +23,12 @@ immutable IdDataObject{T<:Real,V1<:AbstractArray{T},V2<:AbstractArray{T}}
     ny::Int
 
     @compat function (::Type{IdDataObject}){T}(y::AbstractArray{T}, u::AbstractArray{T}, Ts::Float64)
-        N   = size(y, 1)
-        ny  = size(y, 2)
-        nu  = size(u, 2)
+        N   = size(y, 2)
+        ny  = size(y, 1)
+        nu  = size(u, 1)
 
         # Validating amount of samples
-        if size(y, 1) != size(u, 1)
+        if size(y, 2) != size(u, 2)
             error("Input and output need to have the same amount of samples")
         end
 
@@ -48,9 +48,6 @@ end
 Creates an IdDataObject that can be used for System Identification. y and u should have the data arranged in columns.
 Use for example sysIdentData = IdData(y1,[u1 u2],Ts,"Out",["In1" "In2"])""" ->
 function iddata(y::Array, u::Array, Ts::Real=1.)
-    nu = size(u,2)
-    ny = size(y,2)
-
     y,u = promote(y,u)
     return IdDataObject(y, u, convert(Float64,Ts))
 end

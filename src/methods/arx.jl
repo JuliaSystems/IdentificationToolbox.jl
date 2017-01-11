@@ -41,6 +41,7 @@ function _predict_arx{T1,V1,V2,T2,S,U}(data::IdDataObject{T1,V1,V2},
   T = promote_type(T1, T2)
   m = max(na, nb+nk-1)
   estimate_initial = options.estimate_initial
+  y,u,N = data.y,data.u,data.N
 
   a = append!(zeros(T,1),  Θ[1:na])
   b = append!(zeros(T,nk), Θ[na+1:na+nb])
@@ -63,10 +64,8 @@ function _arx{T,A1,A2,S,U}(
     data::IdDataObject{T,A1,A2}, model::PolyModel{S,U,ARX},
     options::IdOptions=IdOptions(estimate_initial=false))
   na,nb,nf,nc,nd,nk = orders(model)
-  y,u = data.y, data.u
-  N   = size(y,1)
-  ny  = data.ny
-  nu  = data.nu
+  y,u,N = data.y.',data.u.',data.N
+  ny,nu = data.ny,data.nu
   estimate_initial = options.estimate_initial
   feedthrough = false # method.feedthrough
   @assert size(u,1)  == N "Input and output need have the same number of samples"
@@ -174,8 +173,8 @@ end
 function _fill_zero_ic{T<:Real,M1<:AbstractArray,M2<:AbstractArray}(
   data::IdDataObject{T,M1,M2}, md::Int, m::Int; feedthrough::Bool=false)
   y,u = data.y, data.u
-  ny  = data.ny
-  nu  = data.nu
+  ny  = size(y,2)
+  nu  = size(u,2)
   l   = nu+ny
 
   Y   = feedthrough ? y[2:end,:] - u[2:end,:] :
