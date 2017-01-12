@@ -6,37 +6,38 @@ function _morsm{T<:Real,A1,A2,S,U}(
   y,u,N     = data.y,data.u,data.N
   ny,nu     = data.ny, data.nu
   ny == 1 || error("morsm: ny == 1 only supported")
-  maxorder  = convert(Int,min(floor(N/5),40))
-  orderh    = maxorder+2
-
   na,nb,bf,nc,nd,nk = orders(model)
+
+  # High order models to test filter
+  minorder  = convert(Int,max(floor(N/1000),2*(nb+nf)))
+  maxorder  = convert(Int,min(floor(N/20),40))
+  orderh    = maxorder+10
+  nbrorders = min(10, maxorder-minorder)
+  ordervec  = convert(Array{Int},round(linspace(minorder, maxorder, nbrorders)))
+  println(ordervec)
+
+  # Model for cost function evaluation using orderh noise model
   if 1 == 1 # only G implemented first
     bjmodel = BJ(nb,nf,0,orderh,nk,ny,nu)
   else # version == :H
     bjmodel = BJ(nb,nf,nc,nd,nk,ny,nu)
   end
 
+  # OE model for STMCB
   Gmodel    = OE(nb,nf,nk)
 
-  minorder  = convert(Int,max(floor(N/1000),(nb+nf)))
-  nbrorders = 50
-  ordervec  = convert(Array{Int},round(linspace(minorder, maxorder, nbrorders)))
-  println(ordervec)
-
+  # High-order model used for high order noise model
   modelₕ = ARX(orderh, orderh, 1)
   Θₕ, peharx = _arx(data, modelₕ, options)
-  println("pe HARX: ", peharx)
-
   mₕ  = ny*orderh+nu*orderh
   xr  = reshape(Θₕ[1:mₕ*ny], mₕ, ny)
   xaₕ = view(xr, 1:ny*orderh, :)
-  xbₕ = view(xr, ny*orderh+(1:nu*orderh), :)
   Aₕ  = PolyMatrix(vcat(eye(T,ny),      _blocktranspose(xaₕ, ny, ny, orderh)), (ny,ny))
-  Bₕ  = PolyMatrix(vcat(zeros(T,ny,nu), _blocktranspose(xbₕ, ny, nu, orderh)), (ny,nu))
-  Iₗ  = PolyMatrix(eye(T,ny),(ny,ny))
 
+  # filtered data
   yf = similar(y)
   uf = similar(u)
+  dataf = iddata(yf, uf, data.Ts)
 
   mₗ = nu*ny*(nb+nf)
   bestx   = zeros(T,mₗ+ny^2*na)
@@ -51,35 +52,33 @@ function _morsm{T<:Real,A1,A2,S,U}(
     Bₗ  = PolyMatrix(vcat(zeros(T,ny,nu), _blocktranspose(xbₗ, ny, nu, m)), (ny,nu))
 
     _filt_fir!(uf, Aₗ, u)
-    if 1 == 1 #filter == :input
+    if 1 == 1
       _filt_fir!(yf, Bₗ, u)
     else # filter == :data
       _filt_fir!(yf, Aₗ, y)
     end
-    dataf = iddata(yf, uf, data.Ts)
+    #dataf = iddata(yf, uf, data.Ts)
     ΘG    = _stmcb(dataf, Gmodel, options)
 
     if 1 == 1
       xg = reshape(ΘG, mₗ, ny)
-      x   = vcat(xg, xaₕ) |> vec
-      #bjmodel = BJ(nb,nf,0,m,nk,ny,nu)
-      pe  = cost(data, bjmodel, x, options)
-      println("x: $(x[1:2]), pe: $pe")
+      x  = vcat(xg, xaₕ) |> vec
+      pe = cost(data, bjmodel, x, options)
     else # version == :H
       # create noise estimate
-      yef    = filt(Aₗ, Iₗ, yf) - filt(b,1,u) # vhat
-      uef    = filt(Aₗ, Iₗ,yef)             # ehat = Hhat^-1 vhat
-      dataef = iddata(yef, uef, data.Ts)
-      stmcbnoise = STMCB(ic, true, maxiter, tol)
-      ΘH,~   = _stmcb(dataef, [nc; nd; nk], stmcbnoise)
-      x      = vcat(ΘG[1:nb], ΘH[1:nc], ΘH[nc+1:end], ΘG[nb+1:end])
-      pe     = calc_bj(data, n, x, BJ(ic=ic))
+      # yef    = filt(Aₗ, Iₗ, yf) - filt(b,1,u) # vhat
+      # uef    = filt(Aₗ, Iₗ,yef)             # ehat = Hhat^-1 vhat
+      # dataef = iddata(yef, uef, data.Ts)
+      # stmcbnoise = STMCB(ic, true, maxiter, tol)
+      # ΘH,~   = _stmcb(dataef, [nc; nd; nk], stmcbnoise)
+      # x      = vcat(ΘG[1:nb], ΘH[1:nc], ΘH[nc+1:end], ΘG[nb+1:end])
+      # pe     = calc_bj(data, n, x, BJ(ic=ic))
     end
 
-    #if pe < bestpe
+    if pe < bestpe
       bestpe = pe
       bestx  = x
-    #end
+    end
   end
   return bestx, bestpe
 end

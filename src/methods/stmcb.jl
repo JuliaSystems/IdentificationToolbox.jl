@@ -38,32 +38,18 @@ function _stmcb{T,A1,A2,S,U}(
   nc = convert(Int, round(size(c,1)/ny)-1)
   nd = convert(Int, round(size(d,1)/ny)-1)
 
+  arxmodel = ARX(nf,nb,nk,ny,nu)
   bjmodel = feedthrough ? BJ(nb,nf,nc,nd,zeros(Int,nu),ny,nu) :
                           BJ(nb,nf,nc,nd,nk,ny,nu)
 
   # first iteration the data is not pre-filtered
-  yf     = copy(data.y)
-  uf     = copy(data.u)
+  yf     = deepcopy(data.y)
+  uf     = deepcopy(data.u)
   dataf  = iddata(yf, uf, data.Ts)
 
-  # initial model
-  arxmodel = ARX(nf,nb,nk,ny,nu)
-  Θ        = _arx(dataf, arxmodel, options)[1]
-  Θᵣ       = reshape(Θ, nb*nu+ny*nf, ny)
-  bestf    = Θᵣ[1:nf*ny,1:ny]
-  bestb    = Θᵣ[ny*nf+(1:nb*nu),1:ny]
-
-  x      = vcat(bestb, bestf, c, d)
-  bestpe = cost(data, bjmodel, x[:], options)
-  Θp     = Θ
-
-  # filter data
-  xf    = _blocktranspose(bestf, ny, ny, nf)
-  F     = PolyMatrix(vcat(eye(T,ny),xf), (ny,ny))
-  Iₗ    = PolyMatrix(eye(T,ny),(ny,ny))
-  yf    = filt(Iₗ, F, y)
-  uf    = filt(Iₗ, F, u)
-  dataf = iddata(yf, uf, data.Ts)
+  bestb   = zeros(T,nb*nu,ny)
+  bestf   = zeros(T,nf*ny,ny)
+  bestpe = typemax(Float64)
   for i = 1:iterations
     Θ  = _arx(dataf, arxmodel, options)[1]
     Θᵣ = reshape(Θ, nb*nu+ny*nf, ny)
@@ -73,24 +59,17 @@ function _stmcb{T,A1,A2,S,U}(
     x  = vcat(b, f, c, d)
     pe = cost(data, bjmodel, x[:], options)
 
-    if rem(i,10) == 0
-      println(i)
-      println(pe)
-    end
-
-    #if pe < bestpe
+    if pe < bestpe
       bestb = b
       bestf = f
       bestpe = pe
-    #end
+    end
 
     # filter data
     xf    = _blocktranspose(f, ny, ny, nf)
     F     = PolyMatrix(vcat(eye(T,ny),xf), (ny,ny))
-    filt!(yf, Iₗ, F, y)
-    filt!(uf, Iₗ, F, u)
-    dataf = iddata(yf, uf, data.Ts)
-    Θp    = Θ
+    _filt_ar!(yf, F, y)
+    _filt_ar!(uf, F, u)
   end
-  return vcat(bestb, bestf)[:]
+  return vec(vcat(bestb, bestf))
 end
