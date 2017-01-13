@@ -64,11 +64,11 @@ function _arx{T,A1,A2,S,U}(
     data::IdDataObject{T,A1,A2}, model::PolyModel{S,U,ARX},
     options::IdOptions=IdOptions(estimate_initial=false))
   na,nb,nf,nc,nd,nk = orders(model)
-  y,u,N = data.y.',data.u.',data.N
+  y,u,N = data.y,data.u,data.N
   ny,nu = data.ny,data.nu
   estimate_initial = options.estimate_initial
   feedthrough = false # method.feedthrough
-  @assert size(u,1)  == N "Input and output need have the same number of samples"
+  @assert size(u,2)  == N "Input and output need have the same number of samples"
 #  @assert length(nb) == nu "nb must have correct size"
 #  @assert length(na) == ny "na must have correct size"
   @assert length(nk) == nu "nk must have correct size"
@@ -77,8 +77,8 @@ function _arx{T,A1,A2,S,U}(
 
   # handle variable nk
   if any(nk .== 0)
-    ye = vcat(y[:,:], zeros(T,1,ny))
-    ue = vcat(zeros(T,1,nu), u)
+    ye = hcat(y[:,:], zeros(T,ny,1))
+    ue = hcat(zeros(T,nu,1), u)
     nk += ones(nu)
   else
     ye = y[:,:]
@@ -88,9 +88,9 @@ function _arx{T,A1,A2,S,U}(
   ut = zeros(T,size(ue)...)
   for i = 1:nu
     if nk[i] > 1
-      ut[nk[i]:end,i] = ue[1:end-nk[i]+1,i]
+      ut[i,nk[i]:end] = ue[i,1:end-nk[i]+1]
     else
-      ut[:,i] = ue[:,i]
+      ut[i,:] = ue[i,:]
     end
   end
   datat = iddata(ye,ut)
@@ -105,11 +105,13 @@ function _arx{T,A1,A2,S,U}(
   # Compute efficiently for order m
 
   if estimate_initial
-    Φ, Y = _fill_truncate_ic(datat, md, m, feedthrough=feedthrough)
+    col,row,Y = _fill_truncate_ic(datat, md, m, feedthrough=feedthrough)
   else
-    Φ, Y = _fill_zero_ic(datat, md, m, feedthrough=feedthrough)
+    col,row,Y = _fill_zero_ic(datat, md, m, feedthrough=feedthrough)
   end
-  Θ = _ls_toeplitz(Φ, Y)
+  _normalize_col_row_Y!(col,row,Y)
+  Φ   = Toeplitz(col,row)
+  Θ   = _ls_toeplitz(Φ, Y)
   mse = _mse(Θ, Φ, Y)
 
   # get Θ in the form Θ = [A₁ᵀ A₂ᵀ… B₁ᵀ B₂ᵀ …]ᵀ
@@ -144,11 +146,9 @@ end
 
 function _fill_truncate_ic{T<:Real,M1<:AbstractArray,M2<:AbstractArray}(
   data::IdDataObject{T,M1,M2}, md::Int, m::Int; feedthrough::Bool=false)
-  y,u = data.y, data.u
-  ny  = data.ny
-  nu  = data.nu
-
-  l   = nu+ny
+  y,u   = data.y.',data.u.'
+  ny,nu = data.ny,data.nu
+  l     = nu+ny
 
   Y   = feedthrough ? y[md+1:end,:] - u[md+1:end,:] :
                       y[md+1:end,:]
@@ -165,17 +165,14 @@ function _fill_truncate_ic{T<:Real,M1<:AbstractArray,M2<:AbstractArray}(
     row[1,(i-1)*l+ny+1:i*l] =  uwd[idx,:]
   end
 
-  _normalize_col_row_Y!(col,row,Y)
-  Φ = Toeplitz(col,row)
-  return Φ, Y
+  return col,row,Y
 end
 
 function _fill_zero_ic{T<:Real,M1<:AbstractArray,M2<:AbstractArray}(
   data::IdDataObject{T,M1,M2}, md::Int, m::Int; feedthrough::Bool=false)
-  y,u = data.y, data.u
-  ny  = size(y,2)
-  nu  = size(u,2)
-  l   = nu+ny
+  y,u   = data.y.',data.u.'
+  ny,nu = data.ny,data.nu
+  l     = nu+ny
 
   Y   = feedthrough ? y[2:end,:] - u[2:end,:] :
                       y[2:end,:]
@@ -186,9 +183,7 @@ function _fill_zero_ic{T<:Real,M1<:AbstractArray,M2<:AbstractArray}(
   col = hcat(-ywd, uwd)
   row = hcat(col[1:1,1:l], zeros(T,1,(m-1)*l))
 
-  _normalize_col_row_Y!(col,row,Y)
-  Φ = Toeplitz(col,row)
-  return Φ, Y
+  return col,row,Y
 end
 
 function _normalize_col_row_Y!{M1<:AbstractMatrix,M2<:AbstractMatrix}(

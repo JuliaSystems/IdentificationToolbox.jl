@@ -52,27 +52,29 @@ B = [0; b]
 F = [1; f]
 
 nb = nf = 3
-nk = 1
 
 N  = 2000
 u1 = randn(N)
 u2 = randn(N)
-lambda = 0.0001
+lambda = 0.1
 e1 = sqrt(lambda)*randn(N)
 e2 = sqrt(lambda)*randn(N)
-y1 = filt(B,F,u1) + 0.*filt(B,F,u2) + filt([1.,0.1], [1, 0.7], e1)
+y1 = filt(B,F,u1) + 0.1*filt(B, [1, 0.2, 0.1],u2) + filt([1.,0.1], [1, 0.7], e1)
 y2 = 0.1*filt(B,F,u1) + filt(B,F,u2) + filt([1.,0.1], [1, 0.7], e2)
 
-u = hcat(u1).'
+u = hcat(u1,u2).'
 y = hcat(y1).'
 data2 = iddata(y, u)
 
 nu = size(u,1)
 ny = size(y,1)
+nk = ones(Int,nu)
 
-model = OE(nb,nf,[1],ny,nu)
+model = OE(nb,nf,nk,ny,nu)
 model2 = OE(nb,nf,[1],ny,nu)
 orders(model)
+model.orders[1,1]
+model[:,1]
 
 m = nf*ny^2+nb*nu*ny
 randn(m)
@@ -125,7 +127,7 @@ norm(g2-gt)/norm(gt)
 norm(gm-gt)/norm(gt)
 
 
-bjmodel = BJ(nb,nf,0,m,1,ny,nu)
+bjmodel = BJ(nb,nf,0,m,nk,ny,nu)
 a,b,f,c,d = _getpolys(bjmodel, xb)
 xb  = vcat(x[1:nb+nf], xaₗ) |> vec
 predict(data2, bjmodel, xb, options2)
@@ -141,7 +143,135 @@ g2 = filt(Bₗ,Aₗ,uz)
 g1 = filt(B,F,uz)
 gt = filt(B,F,uz)
 
-a,b,f,c,d          = _getpolys(model, x0)
+
+
+# High order models to test filter
+minorder  = convert(Int,max(floor(N/1000),2*(nb+nf)))
+maxorder  = convert(Int,min(floor(N/20),40))
+orderh    = maxorder+10
+nbrorders = min(10, maxorder-minorder)
+ordervec  = convert(Array{Int},round(linspace(minorder, maxorder, nbrorders)))
+
+
+# Model for cost function evaluation using orderh noise model
+if 1 == 1 # only G implemented first
+  bjmodel = BJ(nb,nf,0,orderh,1,ny,1)
+else # version == :H
+  bjmodel = BJ(nb,nf,nc,nd,nk,ny,nu)
+end
+
+# OE model for STMCB
+Gmodel = OE(nb,nf,1,ny,1)
+
+data = data2
+# High-order model used for high order noise model
+modelₕ = ARX(orderh, orderh, nk, ny, nu)
+Θₕ, peharx = _arx(data2, modelₕ, options)
+mₕ  = ny*orderh+nu*orderh
+xr  = reshape(Θₕ[1:mₕ*ny], mₕ, ny)
+xaₕ = view(xr, 1:ny*orderh, :)
+Aₕ  = PolyMatrix(vcat(eye(ny), _blocktranspose(xaₕ, ny, ny, orderh)), (ny,ny))
+
+# filtered data
+yf = similar(y)
+uf = similar(u)
+dataf = iddata(yf, uf, data.Ts)
+
+mₗ = nu*ny*(nb+nf)
+bestx   = zeros(mₗ)
+bestpe  = typemax(Float64)
+
+m = 20
+
+modelₗ = ARX(m, m, nk, ny, nu)
+Θₗ  = _arx(data, modelₗ, options)[1]
+xr  = reshape(Θₗ, ny*m+nu*m, ny) # [1:(ny*m+nu*m)*ny]
+xaₗ = view(xr, 1:ny*m, :)
+xbₗ = view(xr, ny*m+(1:nu*m), :)
+Aₗ  = PolyMatrix(vcat(eye(ny),      _blocktranspose(xaₗ, ny, ny, m)), (ny,ny))
+Bₗ  = PolyMatrix(vcat(zeros(ny,nu), _blocktranspose(xbₗ, ny, nu, m)), (ny,nu))
+
+u1 = zeros(1,N)
+_filt_fir!(u1, Aₗ, u[1:1,:])
+u2 = zeros(1,N)
+_filt_fir!(u2, Aₗ, u[2:2,:])
+
+y1 = zeros(1,N)
+_filt_fir!(y1, PolyMatrix(Bₗ[1:1,1:1]), u[1:1,:])
+y2 = zeros(1,N)
+_filt_fir!(y2, PolyMatrix(Bₗ[1:1,2:2]), u[2:2,:])
+
+yh = similar(y)
+_filt_fir!(yh, Aₗ, y)
+
+y1f = yh - y2
+y2f = yh - y1
+
+
+dataf1 = iddata(y1,u1,data.Ts)
+datav1 = iddata(y,u[1:1,:],data.Ts)
+ΘG = _stmcb(dataf1, Gmodel, options)
+xg = reshape(ΘG, nb+nf, ny)
+x  = vcat(xg, xaₕ) |> vec
+x1 = x[1:nb+nf]
+pe = cost(datav1, bjmodel, x, options)
+a,b1,f1,c,d          = _getpolys(Gmodel, x)
+
+dataf2 = iddata(y2,u2,data.Ts)
+datav2 = iddata(y,u[2:2,:],data.Ts)
+ΘG = _stmcb(dataf2, Gmodel, options)
+xg = reshape(ΘG, nb+nf, ny)
+x  = vcat(xg, xaₕ) |> vec
+x2 = x[1:nb+nf]
+pe = cost(datav2, bjmodel, x, options)
+a,b2,f2,c,d          = _getpolys(Gmodel, x)
+
+yhat = filt(b1,f1,u[1:1,:]) + filt(b2,f2,u[2:2,:])
+sumabs2(y-yhat)/N
+
+x0n = vcat(x1[1:nb], x2[1:nb], x1[nb+(1:nf)], x2[nb+(1:nf)])
+
+Morders = MPolyOrder(zeros(Int,1,1), nb*ones(Int,ny,nu), nf*ones(Int,ny,nu), zeros(Int,ny,ny), zeros(Int,ny,ny), ones(Int,ny,nu))
+Mmodel = PolyModel(Morders, ny, nu, ControlCore.Siso{false}, CUSTOM)
+
+cost(data2, Mmodel, x0n, options)
+@time sys2 = pem(data2, Mmodel, x0n, options) # , IdOptions(f_tol = 1e-32)
+B1 = sys1.B
+F1 = sys1.F
+sys1.info.opt
+sys1.info.mse
+fieldnames(sys1.info.opt.trace[1].metadata)
+sys1.info.opt.trace[1]
+
+data2.nu
+_morsm_yi(data2,Mmodel,options)
+
+nA,nB,nF,nC,nD,nk = orders(Mmodel)
+convert(Int, max(floor(N/1000), 2*(maximum(nB[1,:]) + maximum(nF[1,:])) ))
+
+maxorder  = convert(Int, min(floor(N/20),40))
+orderh    = maxorder+10
+nbrorders = min(10, maxorder-minorder)
+ordervec  = convert(Array{Int},round(linspace(minorder, maxorder, nbrorders)))
+
+Mmodel.orders
+MPolyOrder(na[i:i,:],)
+# High-order model used for high order noise model
+modelₕ = ARX(orderh*ones(Int,ny,ny), orderh*ones(Int,ny,nu), nk)
+
+uz    = zeros(1,100)
+uz[1] = 1.0
+g1 = filt(PolyMatrix(B1[1:1,1:1]),F1,uz)
+g2 = filt(PolyMatrix(B1[1:1,2:2]),F1,uz)
+gf1 = filt(b1,f1,uz)
+gf2 = filt(b2,f2,uz)
+gt = filt(B,F,uz.').'
+
+norm(g1-gt)/norm(gt)
+norm(g2-0.1*gt)/norm(gt)
+norm(gf1-gt)/norm(gt)
+norm(gf2-0.1*gt)/norm(gt)
+
 out = zeros(y)
 @time _filt_fir!(out,b,y)
 filt!(out,b,f,u1)

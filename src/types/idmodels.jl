@@ -11,13 +11,13 @@ immutable FullPolyOrder{S} <: AbstractModelOrder
   @compat function (::Type{FullPolyOrder})(na::Int, nb::Int, nf::Int, nc::Int,
     nd::Int, nk::Vector{Int})
     _fullpolyordercheck(na,nb,nf,nc,nd,nk)
-    new{ControlCore.Siso{false}}(na,nb,nf,nc,nd,nk)
+    new{Siso{false}}(na,nb,nf,nc,nd,nk)
   end
 
   @compat function (::Type{FullPolyOrder})(na::Int, nb::Int, nf::Int, nc::Int,
     nd::Int, nk::Int)
     _fullpolyordercheck(na,nb,nf,nc,nd,nk)
-    new{ControlCore.Siso{true}}(na,nb,nf,nc,nd,[nk])
+    new{Siso{true}}(na,nb,nf,nc,nd,[nk])
   end
 end
 
@@ -38,6 +38,17 @@ function _fullpolyordercheck(na,nb,nc,nd,nf,nk)
     throw(DomainError())
   end
 end
+
+function getindex{S}(p::FullPolyOrder{Siso{S}}, row::Int, col::Int)
+  1 ≤ col ≤ length(p.nk) || error("s[,idx]: idx out of bounds")
+  nk = S ? p.nk[1] : p.nk
+  FullPolyOrder(p.na, p.nb, p.nf, p.nc, p.nd, nk)
+end
+
+getindex{S}(p::FullPolyOrder{S}, ::Colon)           = p
+getindex{S}(p::FullPolyOrder{S}, ::Colon, ::Colon)  = p
+getindex{S}(p::FullPolyOrder{S}, ::Colon, idx::Int) = p[1,idx]
+getindex{S}(p::FullPolyOrder{S}, idx::Int, ::Colon) = p
 
 abstract IdModel
 
@@ -63,6 +74,37 @@ immutable PolyModel{S,M,P} <: IdModel
       P<:PolyType, S}(orders::M, ny::Int, nu::Int, ::Type{S}, ::Type{P})
     new{S,M,P}(orders,ny,nu)
   end
+end
+
+size(p::PolyModel) = ny,nu
+function size{S}(p::PolyModel{S}, i::Int)
+  i > 0 || throw(ArgumentError("size: dimension needs to be postive"))
+  if i == 1
+    return ny
+  elseif i == 2
+    return nu
+  end
+  return 1
+end
+length(p::PolyModel) = p.ny*p.nu
+
+# Slicing (`getindex`)
+function getindex{S,M,P}(p::PolyModel{S,M,P}, row::Int, col::Int)
+  1 ≤ row ≤ p.ny || error("s[idx,]: idx out of bounds")
+  1 ≤ col ≤ p.nu || error("s[,idx]: idx out of bounds")
+  println(p.orders)
+  PolyModel(p.orders[row,col], 1, 1, S, P)
+end
+
+getindex{S,M,P}(p::PolyModel{S,M,P}, ::Colon)           = p
+getindex{S,M,P}(p::PolyModel{S,M,P}, ::Colon, ::Colon)  = p
+
+function getindex{S,M,P}(p::PolyModel{S,M,P}, ::Colon, idx::Int)
+  PolyModel(p.orders[:,idx], ny, 1, S, P)
+end
+
+function getindex{S,M,P}(p::PolyModel{S,M,P}, idx::Int, ::Colon)
+  PolyModel(orders[idx,:], 1, nu, S, P)
 end
 
 # outer constructors
@@ -126,6 +168,12 @@ function ARX(na::Int, nb::Int, nk::Union{Int,Vector{Int}}, ny::Int=1, nu::Int=1)
   orders = FullPolyOrder(na, nb, 0, 0, 0, nk)
   S = (typeof(nk) == Int)
   PolyModel(orders, ny, nu, ControlCore.Siso{S}, ARX)
+end
+
+function ARX{M<:AbstractMatrix{Int}}(na::M, nb::M, nk::M, ny::Int=1, nu::Int=1)
+  #_delaycheck(nk, nu)
+  orders = MPolyOrder(na, nb, zeros(Int,ny,nu), zeros(Int,ny,ny), zeros(Int,ny,ny), nk)
+  PolyModel(orders, ny, nu, ControlCore.Siso{false}, ARX)
 end
 
 """
@@ -232,18 +280,18 @@ immutable MPolyOrder <: AbstractModelOrder
   na::Matrix{Int}
   nb::Matrix{Int}
   nf::Matrix{Int}
-  nc::Vector{Int}
-  nd::Vector{Int}
+  nc::Matrix{Int}
+  nd::Matrix{Int}
   nk::Matrix{Int}
 
   @compat function MPolyOrder(na::Matrix{Int}, nb::Matrix{Int}, nf::Matrix{Int},
-    nc::Vector{Int}, nd::Vector{Int}, nk::Matrix{Int})
+    nc::Matrix{Int}, nd::Matrix{Int}, nk::Matrix{Int})
     _mpolyordercheck(na,nb,nf,nc,nd,nk)
     new(na,nb,nf,nc,nd,nk)
   end
 end
 
-function _mpolyordercheck(na,nb,nc,nd,nf,nk)
+function _mpolyordercheck(na,nb,nf,nc,nd,nk)
   for t in ((na,"na"),(nb,"nb"),(nf,"nf"),(nc,"nc"),(nd,"nd"))
     n,s = t
     if any(n .< 0)
@@ -259,4 +307,31 @@ function _mpolyordercheck(na,nb,nc,nd,nf,nk)
     warn("FullPolyOrder: at least one model order must be greater than zero")
     throw(DomainError())
   end
+  ny,nu = size(nb)
+  size(na) == (ny,ny) || error("MPolyOrder: input dimensions do not match")
+  size(nf) == (ny,nu) || error("MPolyOrder: input dimensions do not match")
+  size(nc) == (ny,ny) || error("MPolyOrder: input dimensions do not match")
+  size(nd) == (ny,ny) || error("MPolyOrder: input dimensions do not match")
+  isdiag(nc)          || error("MPolyOrder: Noise filter needs to be diagonal")
+  isdiag(nd)          || error("MPolyOrder: Noise filter needs to be diagonal")
+end
+
+size(p::MPolyOrder) = size(p.nb)
+# Slicing (`getindex`)
+function getindex(p::MPolyOrder, row::Int, col::Int)
+  1 ≤ row ≤ size(p,1) || error("s[idx,]: idx out of bounds")
+  1 ≤ col ≤ size(p,2) || error("s[,idx]: idx out of bounds")
+  MPolyOrder(p.na[row:row,col:col], p.nb[row:row,col:col], p.nf[row:row,col:col], p.nc[row:row,col:col], p.nd[row:row,col:col])
+end
+
+getindex(p::MPolyOrder, ::Colon)           = p
+getindex(p::MPolyOrder, ::Colon, ::Colon)  = p
+
+function getindex(p::MPolyOrder, ::Colon, idx::Int)
+  1 ≤ idx ≤ size(p,2) || error("s[,idx]: idx out of bounds")
+  PolyModel(p.na[:,idx:idx], p.nb[:,idx:idx], p.nf[:,idx:idx], p.nc[:,idx:idx], p.nd[:,idx:idx])
+end
+
+function getindex(p::MPolyOrder, idx::Int, ::Colon)
+  PolyModel(p.na[idx:idx,:], p.nb[idx:idx,:], p.nf[idx:idx,:], p.nc[idx:idx,:], p.nd[idx:idx,:])
 end

@@ -1,6 +1,6 @@
 module IdentificationToolbox
 
-import Base.==
+import Base: ==, size, length, getindex
 
 # Import printing functions
 import Base: showcompact, show, showall, summary

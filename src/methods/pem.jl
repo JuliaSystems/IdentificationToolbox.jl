@@ -149,8 +149,7 @@ end
 # calculate the value function V. Used for automatic differentiation
 function cost{T<:Real,S,M<:AbstractModelOrder,P,O}(data::IdDataObject{T}, model::PolyModel{S,M,P}, x,
     options::IdOptions{O}=IdOptions())
-  y     = data.y
-  N     = size(y,1)
+  y,N   = data.y,data.N
   y_est = predict(data, model, x, options)
   return cost(y, y_est, N, options)
 end
@@ -230,14 +229,14 @@ function predict{T1,A1,A2,S,P,T2,O}(data::IdDataObject{T1,A1,A2},
   a,b,f,c,d          = _getmatrix(model, Θ)
   T = promote_type(T1,T2)
 
-  out = zeros(T, N, ny)
+  out = zeros(T, ny, N)
   for i = 1:ny
     aᵢ = view(a,i,:)
     bᵢ = view(b,i,:)
     fᵢ = view(f,i,:)
     cᵢ = c[i]
     dᵢ = d[i]
-    _predict_i!(view(out,:,i),data,model,i,aᵢ,bᵢ,fᵢ,cᵢ,dᵢ,
+    _predict_i!(view(out,i,:),data,model,i,aᵢ,bᵢ,fᵢ,cᵢ,dᵢ,
       view(na,i,:), view(nb,i,:), view(nf,i,:), view(nk,i,:))
   end
   return out
@@ -251,19 +250,19 @@ function _predict_i!{T1,T2,A1,A2,S,P}(out,data::IdDataObject{T1,A1,A2},
   for j in 1:nu
     num = _poly_mul(a[i], _poly_mul(d, b[j]))
     den = _poly_mul(c, f[j])
-    out[:] += filt(num, den, view(u,:,j))
+    out[:] += filt(num, den, view(u,j,:))
   end
   for j in 1:ny
     if j == i
       continue
     end
     num = _poly_mul(a[i], _poly_mul(d, a[j]))
-    out[:] += filt(num, c, view(y,:,j))
+    out[:] += filt(num, c, view(y,j,:))
   end
 
   tmp = _poly_mul(d,a[i])
   num = vcat(c, zeros(T2, length(tmp)-length(c))) - tmp
-  out[:] += filt(num, c, view(y,:,i))
+  out[:] += filt(num, c, view(y,i,:))
 end
 
 function _poly_mul(a, b)
