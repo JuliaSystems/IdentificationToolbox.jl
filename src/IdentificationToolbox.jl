@@ -1,5 +1,8 @@
 module IdentificationToolbox
 
+using Polynomials, Optim, PolynomialMatrices, ControlCore, ToeplitzMatrices,
+  GeneralizedSchurAlgorithm, Compat
+
 import Base: ==, size, length, getindex
 
 # Import printing functions
@@ -33,9 +36,6 @@ export
   fitmodel,
   iddata,
   IdOptions
-
-using Polynomials, Optim, PolynomialMatrices, ControlCore, ToeplitzMatrices,
-  GeneralizedSchurAlgorithm, Compat
 
 using Reexport
 @reexport using LossFunctions

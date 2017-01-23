@@ -14,6 +14,7 @@ function arx{T,V1,V2,S,U}(
   data::IdDataObject{T,V1,V2}, model::PolyModel{S,U,ARX},
   options::IdOptions=IdOptions(estimate_initial=false))
   na,nb,nf,nc,nd,nk = orders(model)
+  # TODO model order assertions
   y,u   = data.y, data.u
   ny,nu = data.ny,data.nu
   N     = size(y,1)
@@ -21,7 +22,7 @@ function arx{T,V1,V2,S,U}(
   # estimate model
   x, mse    = _arx(data, model, options)
 
-  mse       = _mse(data, model, x, options)
+#  mse       = _mse(data, model, x, options)
   modelfit  = _modelfit(mse, data.y)
   idinfo    = OneStepIdInfo(mse, modelfit, model)
   a,b,f,c,d = _getpolys(model, x)

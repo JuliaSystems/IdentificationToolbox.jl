@@ -92,7 +92,6 @@ length(p::PolyModel) = p.ny*p.nu
 function getindex{S,M,P}(p::PolyModel{S,M,P}, row::Int, col::Int)
   1 ≤ row ≤ p.ny || error("s[idx,]: idx out of bounds")
   1 ≤ col ≤ p.nu || error("s[,idx]: idx out of bounds")
-  println(p.orders)
   PolyModel(p.orders[row,col], 1, 1, S, P)
 end
 
@@ -145,6 +144,12 @@ function FIR(nb::Int, nk::Union{Int,Vector{Int}}, ny::Int=1, nu::Int=1)
   PolyModel(orders, ny, nu, ControlCore.Siso{S}, FIR)
 end
 
+function FIR{M<:AbstractMatrix{Int}}(nb::M, nk::M, ny::Int=1, nu::Int=1)
+  #_delaycheck(nk, nu)
+  orders = MPolyOrder(zeros(Int,ny,ny), nb, zeros(Int,ny,nu), zeros(Int,ny,ny), zeros(Int,ny,ny), nk)
+  PolyModel(orders, ny, nu, ControlCore.Siso{false}, FIR)
+end
+
 """
     `AR(na, ny=1, nu=1)`
 
@@ -155,6 +160,12 @@ function AR(na::Int, ny::Int=1, nu::Int=1)
   orders = FullPolyOrder(na, 0, 0, 0, 0, zeros(Int,nu))
   S = (typeof(nk) == Int)
   PolyModel(orders, ny, nu, ControlCore.Siso{S}, AR)
+end
+
+function AR{M<:AbstractMatrix{Int}}(na::M, ny::Int=1, nu::Int=1)
+  #_delaycheck(nk, nu)
+  orders = MPolyOrder(na, zeros(Int,ny,nu), zeros(Int,ny,nu), zeros(Int,ny,ny), zeros(Int,ny,ny), zeros(Int,nu))
+  PolyModel(orders, ny, nu, ControlCore.Siso{false}, AR)
 end
 
 """
@@ -187,6 +198,12 @@ function ARMAX(na::Int, nb::Int, nc::Int, nk::Union{Int,Vector{Int}}, ny::Int=1,
   orders = FullPolyOrder(na, nb, 0, nc, 0, nk)
   S = (typeof(nk) == Int)
   PolyModel(orders, ny, nu, ControlCore.Siso{S}, ARMAX)
+end
+
+function ARMAX{M<:AbstractMatrix{Int}}(na::M, nb::M, nc::M, nk::M, ny::Int=1, nu::Int=1)
+  #_delaycheck(nk, nu)
+  orders = MPolyOrder(na, nb, zeros(Int,ny,nu), nc, zeros(Int,ny,ny), nk)
+  PolyModel(orders, ny, nu, ControlCore.Siso{false}, ARMAX)
 end
 
 """
@@ -225,6 +242,12 @@ function OE(nb::Int, nf::Int, nk::Union{Int,Vector{Int}}, ny::Int=1, nu::Int=1)
   orders = FullPolyOrder(0, nb, nf, 0, 0, nk)
   S = (typeof(nk) == Int)
   PolyModel(orders, ny, nu, ControlCore.Siso{S}, OE)
+end
+
+function OE{M<:AbstractMatrix{Int}}(nb::M, nf::M, nk::M, ny::Int=1, nu::Int=1)
+  #_delaycheck(nk, nu)
+  orders = MPolyOrder(zeros(Int,ny,ny), nb, nf, zeros(Int,ny,ny), zeros(Int,ny,ny), nk)
+  PolyModel(orders, ny, nu, ControlCore.Siso{false}, OE)
 end
 
 """
