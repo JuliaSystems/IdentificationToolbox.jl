@@ -104,7 +104,7 @@ end
 function _mse{T<:Real,S<:PolyModel, O}(data::IdDataObject{T}, model::S, x, options::IdOptions{O}=IdOptions())
   y,N     = data.y,data.N
   y_est = predict(data, model, x, options)
-  sumabs2(y-y_est,2)[:]/2N
+  sumabs2(y-y_est,2)[:]/N
 end
 
 function _modelfit{T<:Real}(mse, y::AbstractVector{T})
