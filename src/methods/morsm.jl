@@ -130,8 +130,8 @@ function _morsm_yi{T<:Real,A1,A2,S,U}(
   Aₕ  = PolyMatrix(vcat(eye(T,ny), _blocktranspose(xaₕ, ny, ny, orderh)), (ny,ny))
 
   # filtered data
-  yf = similar(u)
-  uf = similar(u)
+  yf = similar(u,1,N)
+  uf = similar(u,1,N)
 
   mₗ      = nu*ny*(nb+nf)
   b       = Vector{Vector{T}}(length(nb))
@@ -150,8 +150,8 @@ function _morsm_yi{T<:Real,A1,A2,S,U}(
 
     yp = zeros(T, size(y))
     for iu in 1:nu
-      _filt_fir!(view(uf,iu:iu,:), Aₗ, view(u,iu:iu,:))
-      _filt_fir!(view(yf,iu:iu,:), Bₗ[1:1,iu:iu], view(u,iu:iu,:))
+      _filt_fir!(uf, Aₗ, view(u,iu:iu,:))
+      _filt_fir!(yf, Bₗ[1:1,iu:iu], view(u,iu:iu,:))
       nbi,nfi,nki = nb[1,iu],nf[1,iu],nk[1,iu]
       dataf   = iddata(yf, uf, data.Ts)
 
