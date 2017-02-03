@@ -11,6 +11,10 @@ import Base: showcompact, show, showall, summary
 import ControlCore: isdiscrete, samplingtime, numstates, numinputs, numoutputs
 import ControlCore: Siso, Continuous
 
+# using some PolynomialMatrices filtering
+using PolynomialMatrices._filt_fir!
+using PolynomialMatrices._filt_ar!
+
 export
   # utilities
   detrend,
@@ -53,7 +57,7 @@ include("types/iddss.jl")
 include("types/options.jl")
 
 # utilities
-include("utilities/filt.jl")
+#include("utilities/filt.jl")
 include("utilities/filtic.jl")
 include("utilities/detrend.jl")
 include("utilities/compare.jl")

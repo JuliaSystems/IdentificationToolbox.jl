@@ -1,5 +1,5 @@
-function _morsm{T<:Real,A1,A2,S,U}(
-  data::IdDataObject{T,A1,A2}, model::PolyModel{S,U,OE},
+function _morsm{T<:Real,A1,A2,S,OE}(
+  data::IdDataObject{T,A1,A2}, model::PolyModel{S,FullPolyOrder,OE},
   options::IdOptions=IdOptions(estimate_initial=false))
   estimate_initial = options.estimate_initial
 
@@ -83,41 +83,44 @@ function _morsm{T<:Real,A1,A2,S,U}(
 end
 
 # Matlab type of model structure
-function _morsm{T<:Real,A1,A2,S,U}(
-  data::IdDataObject{T,A1,A2}, model::PolyModel{S,MPolyOrder,U},
+function _morsm{T<:Real,A1,A2,S,OE}(
+  data::IdDataObject{T,A1,A2}, model::PolyModel{S,MPolyOrder,OE},
   options::IdOptions=IdOptions(estimate_initial=false))
-  estimate_initial = options.estimate_initial
   any(orders(model)[1] .> 0) && error("MORSM: A can not be estimated")
 
   na,nb,nf,nc,nd,nk = orders(model)
-
+  ny,nu             = data.ny,data.nu
+  y,u               = data.y,data.u
+  b  = Vector{Vector{T}}(ny)
+  f  = Vector{Vector{T}}(ny)
+  pe = Vector{T}(ny)
   for i = 1:ny
-    datai        = iddata(view(y,i,:),u,data.Ts) #
-    modeli       = PolyModel(na[i:i,:], nb[i:i,:], nf[i:i,:], na[i:i,:], na[i:i,:])
-    bi,fi,ci,di  = _morsm_yi(datai, model, options)
+    datai     = iddata(view(y,i:i,:), u, data.Ts) #
+    morderi   = MPolyOrder(na[i:i,:], nb[i:i,:], nf[i:i,:], na[i:i,:], na[i:i,:], nk[i:i,:])
+    modeli    = PolyModel(morderi, ny, nu, ControlCore.Siso{false}, OE)
+    bᵢ,fᵢ,peᵢ = _morsm_yi(datai, modeli, options)
+    b[i]      = bᵢ
+    f[i]      = fᵢ
+    pe[i]     = peᵢ
   end
+
+  return vcat(vcat(b...), vcat(f...)), pe
 end
 
-function _morsm_yi{T<:Real,A1,A2,S}(
-  data::IdDataObject{T,A1,A2}, model::PolyModel{S,MPolyOrder,CUSTOM},
+function _morsm_yi{T<:Real,A1,A2,S,U}(
+  data::IdDataObject{T,A1,A2}, model::PolyModel{S,MPolyOrder,U},
   options::IdOptions=IdOptions(estimate_initial=false))
   y,u,N     = data.y,data.u,data.N
   ny,nu     = 1, data.nu  # ny = 1
 
   na,nb,nf,nc,nd,nk = orders(model)
-  println(nb)
-  println(nf)
 
   # High order models to test filter
-  minorder  = convert(Int, max(floor(N/1000), 2*(maximum(nb) + maximum(nf)) ))
+  minorder  = convert(Int, max(floor(N/1000), maximum(nb), maximum(nf) ))
   maxorder  = convert(Int, min(floor(N/20),40))
   orderh    = maxorder+10
   nbrorders = min(10, maxorder-minorder)
   ordervec  = convert(Array{Int},round(linspace(minorder, maxorder, nbrorders)))
-
-  println(ny)
-  println(nu)
-  println(orderh*ones(Int,ny,ny))
 
   # High-order model used for high order noise model
   modelₕ     = ARX(orderh, orderh, ones(Int,nu), ny, nu)
@@ -149,25 +152,27 @@ function _morsm_yi{T<:Real,A1,A2,S}(
     for iu in 1:nu
       _filt_fir!(view(uf,iu:iu,:), Aₗ, view(u,iu:iu,:))
       _filt_fir!(view(yf,iu:iu,:), Bₗ[1:1,iu:iu], view(u,iu:iu,:))
-      nbi,nfi = nb[i,iu],nf[i,iu]
+      nbi,nfi,nki = nb[1,iu],nf[1,iu],nk[1,iu]
       dataf   = iddata(yf, uf, data.Ts)
 
       # OE model for STMCB
       Gmodel  = OE(nbi,nfi,1,1,1)
 
       ΘG = _stmcb(dataf, Gmodel, options)
-      xg = reshape(ΘG, nb+nf, ny)
+      xg = reshape(ΘG, nbi+nfi, ny)
       b[iu] = xg[1:nbi]
       f[iu] = xg[nbi+(1:nfi)]
 
-      yp += filt(vcat(zeros(T,nk),b[iu]), vcat(ones(T,1),f[iu]), view(u,iu,:))
+      tmp = filt(vcat(zeros(T,nki),b[iu]), vcat(ones(T,1),f[iu]), view(u,iu,:))
+      yp[:] += filt(vcat(zeros(T,nki),b[iu]), vcat(ones(T,1),f[iu]), view(u,iu,:))
     end
     pe = cost(y, yp, N, options)
 
     if pe < bestpe
       bestb = b
       bestf = f
+      bestpe = pe
     end
   end
-  return bestb, bestf
+  return vcat(bestb...), vcat(bestf...), bestpe
 end

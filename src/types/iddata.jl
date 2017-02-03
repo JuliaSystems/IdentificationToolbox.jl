@@ -47,7 +47,7 @@ end
 
 Creates an IdDataObject that can be used for System Identification. y and u should have the data arranged in columns.
 Use for example sysIdentData = IdData(y1,[u1 u2],Ts,"Out",["In1" "In2"])""" ->
-function iddata(y::Array, u::Array, Ts::Real=1.)
+function iddata(y::AbstractArray, u::AbstractArray, Ts::Real=1.)
     y,u = promote(y,u)
     return IdDataObject(y, u, convert(Float64,Ts))
 end
