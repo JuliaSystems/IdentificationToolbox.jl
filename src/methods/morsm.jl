@@ -9,10 +9,10 @@ function _morsm{T<:Real,A1,A2,S,OE}(
   na,nb,nf,nc,nd,nk = orders(model)
 
   # High order models to test filter
-  minorder  = convert(Int,max(floor(N/1000),2*(nb+nf)))
-  maxorder  = convert(Int,min(floor(N/20),40))
-  orderh    = maxorder+10
-  nbrorders = min(10, maxorder-minorder)
+  minorder  = max(maximum(nb), maximum(nf), Int(floor(N/2)))
+  maxorder  = max(10*maximum(nb), 10*maximum(nf), Int(floor(N/2)))
+  orderh    = min(maxorder+10, Int(floor(N/2)))
+  nbrorders = min(10, maxorder-minorder+1)
   ordervec  = convert(Array{Int},round(linspace(minorder, maxorder, nbrorders)))
 
   # Model for cost function evaluation using orderh noise model
@@ -116,10 +116,10 @@ function _morsm_yi{T<:Real,A1,A2,S,U}(
   na,nb,nf,nc,nd,nk = orders(model)
 
   # High order models to test filter
-  minorder  = convert(Int, max(floor(N/1000), maximum(nb), maximum(nf) ))
-  maxorder  = convert(Int, min(floor(N/20),40))
-  orderh    = maxorder+10
-  nbrorders = min(10, maxorder-minorder)
+  minorder  = max(maximum(nb), maximum(nf), Int(floor(N/2)))
+  maxorder  = max(10*maximum(nb), 10*maximum(nf), Int(floor(N/2)))
+  orderh    = min(maxorder+10, Int(floor(N/2)))
+  nbrorders = min(10, maxorder-minorder+1)
   ordervec  = convert(Array{Int},round(linspace(minorder, maxorder, nbrorders)))
 
   # High-order model used for high order noise model
