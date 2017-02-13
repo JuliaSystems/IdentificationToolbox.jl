@@ -9,8 +9,8 @@ function _morsm{T<:Real,A1,A2,S,OE}(
   na,nb,nf,nc,nd,nk = orders(model)
 
   # High order models to test filter
-  minorder  = max(maximum(nb), maximum(nf), Int(floor(N/2)))
-  maxorder  = max(10*maximum(nb), 10*maximum(nf), Int(floor(N/2)))
+  minorder  = min(max(maximum(nb), maximum(nf)), Int(floor(N/2)))
+  maxorder  = min(10*max(maximum(nb), maximum(nf)), Int(floor(N/2)))
   orderh    = min(maxorder+10, Int(floor(N/2)))
   nbrorders = min(10, maxorder-minorder+1)
   ordervec  = convert(Array{Int},round(linspace(minorder, maxorder, nbrorders)))
@@ -116,8 +116,8 @@ function _morsm_yi{T<:Real,A1,A2,S,U}(
   na,nb,nf,nc,nd,nk = orders(model)
 
   # High order models to test filter
-  minorder  = max(maximum(nb), maximum(nf), Int(floor(N/2)))
-  maxorder  = max(10*maximum(nb), 10*maximum(nf), Int(floor(N/2)))
+  minorder  = min(max(maximum(nb), maximum(nf)), Int(floor(N/2)))
+  maxorder  = min(10*max(maximum(nb), maximum(nf)), Int(floor(N/2)))
   orderh    = min(maxorder+10, Int(floor(N/2)))
   nbrorders = min(10, maxorder-minorder+1)
   ordervec  = convert(Array{Int},round(linspace(minorder, maxorder, nbrorders)))
