@@ -1,15 +1,14 @@
 module IdentificationToolbox
 
-using Polynomials, Optim, PolynomialMatrices, ControlCore, ToeplitzMatrices,
-  GeneralizedSchurAlgorithm, Compat
+using Polynomials, Optim, PolynomialMatrices, SystemsBase, ToeplitzMatrices,
+  Compat, GeneralizedSchurAlgorithm
 
 import Base: ==, size, length, getindex
 
 # Import printing functions
 import Base: showcompact, show, showall, summary
 
-import ControlCore: isdiscrete, samplingtime, numstates, numinputs, numoutputs
-import ControlCore: Siso, Continuous
+import SystemsBase: isdiscrete, samplingtime, numstates, numinputs, numoutputs
 
 # using some PolynomialMatrices filtering
 using PolynomialMatrices._filt_fir!
@@ -44,8 +43,8 @@ export
 using Reexport
 @reexport using LossFunctions
 
-typealias PolyMatrix PolynomialMatrices.PolyMatrix
-typealias Poly Polynomials.Poly
+const PolyMatrix = PolynomialMatrices.PolyMatrix
+const Poly = Polynomials.Poly
 
 # types
 include("types/iddata.jl")

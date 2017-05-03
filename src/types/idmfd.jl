@@ -1,5 +1,5 @@
 
-immutable IdMFD{T,S,M1,M2,M3,M4,M5,C1,C2} <: ControlCore.LtiSystem{T,S}
+immutable IdMFD{T,S,L,M1,M2,M3,M4,M5,C1,C2} <: SystemsBase.LtiSystem{T,S}
   A::M1
   B::M2
   F::M3
@@ -12,10 +12,10 @@ immutable IdMFD{T,S,M1,M2,M3,M4,M5,C1,C2} <: ControlCore.LtiSystem{T,S}
   # Discrete-time, single-input-single-output MFD model
   @compat function (::Type{IdMFD}){T}(A::Poly{T}, B::Poly{T}, F::Poly{T}, C::Poly{T},
     D::Poly{T}, Ts::Float64, info::IdInfo)
-    G = ControlCore.lfd(B, A*F, Ts)
-    H = ControlCore.lfd(C, A*D, Ts)
+    G = SystemsBase.lfd(B, A*F, Ts)
+    H = SystemsBase.lfd(C, A*D, Ts)
     M = Poly{T}
-    new{ControlCore.Siso{true},ControlCore.Continuous{false},M,M,M,M,M,typeof(G),typeof(H)}(
+    new{Val{:siso},Val{:disc},Val{:lfd},M,M,M,M,M,typeof(G),typeof(H)}(
       A, B, F, C, D, G, H, info)
   end
 
@@ -24,9 +24,9 @@ immutable IdMFD{T,S,M1,M2,M3,M4,M5,C1,C2} <: ControlCore.LtiSystem{T,S}
     M2<:PolynomialMatrices.PolyMatrix, M3<:PolynomialMatrices.PolyMatrix,
     M4<:PolynomialMatrices.PolyMatrix, M5<:PolynomialMatrices.PolyMatrix}(
       A::M1, B::M2, F::M3, C::M4, D::M5, Ts::Float64, info::IdInfo)
-    G = ControlCore.lfd(B, A*F, Ts)
-    H = ControlCore.lfd(C, A*D, Ts)
-    new{ControlCore.Siso{false},ControlCore.Continuous{false},M1,M2,M3,M4,M5,typeof(G),typeof(H)}(
+    G = SystemsBase.lfd(B, A*F, Ts)
+    H = SystemsBase.lfd(C, A*D, Ts)
+    new{Val{:mimo},Val{:disc},Val{:lfd},M1,M2,M3,M4,M5,typeof(G),typeof(H)}(
       A, B, F, C, D, G, H, info)
   end
 end

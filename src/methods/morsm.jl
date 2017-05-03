@@ -97,7 +97,7 @@ function _morsm{T<:Real,A1,A2,S,OE}(
   for i = 1:ny
     datai     = iddata(view(y,i:i,:), u, data.Ts) #
     morderi   = MPolyOrder(na[i:i,:], nb[i:i,:], nf[i:i,:], na[i:i,:], na[i:i,:], nk[i:i,:])
-    modeli    = PolyModel(morderi, ny, nu, ControlCore.Siso{false}, OE)
+    modeli    = PolyModel(morderi, ny, nu, Val{:mimo}, OE)
     bᵢ,fᵢ,peᵢ = _morsm_yi(datai, modeli, options)
     b[i]      = bᵢ
     f[i]      = fᵢ

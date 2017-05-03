@@ -1,6 +1,6 @@
 type IdDSs{T<:Real, M1<:AbstractMatrix{T}, M2<:AbstractMatrix{T},
     M3<:AbstractMatrix{T}, M4<:AbstractMatrix{T}, M5<:AbstractMatrix{T},
-    M6<:AbstractMatrix{T}, S<:IdInfo} <: ControlCore.LtiSystem
+    M6<:AbstractMatrix{T}, S<:IdInfo} <: SystemsBase.LtiSystem
     A::M1
     B::M2
     C::M3
@@ -25,8 +25,8 @@ type IdDSs{T<:Real, M1<:AbstractMatrix{T}, M2<:AbstractMatrix{T},
     end
 end
 
-ControlCore.samplingtime(s::IdDSs) = s.Ts
-ControlCore.isdiscrete(s::IdDSs)   = true
+samplingtime(s::IdDSs) = s.Ts
+isdiscrete(s::IdDSs)   = true
 
 summary(s::IdDSs) = string("ss(nx=", s.nx, ",nu=", s.nu, ",ny=", s.ny, ",Ts=",
   s.Ts, ")")

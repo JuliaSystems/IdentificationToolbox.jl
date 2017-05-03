@@ -44,6 +44,97 @@ for system in S
   @test abs(system.info.mse-lambda) < 0.3*lambda
 end
 
+using ForwardDiff
+
+f5(x::Vector) = sum(sin, x) + prod(tan, x) * sum(sqrt, x)
+
+function f1(x::Vector)
+  return dot(x,x)
+end
+
+function f2(x::Vector)
+  A = reshape(x, 2, 2)
+  return trace(A*A)
+end
+
+function f3(x::Vector)
+  y = x[1]
+  y2 = x[2]
+  return y*y2
+end
+
+using ForwardDiff
+N = 100
+nb = nf = 2
+ny = nu = 2
+nk = 1
+m  = ny*nf+nu*nb
+x  = randn(m*ny)
+xr = reshape(x[1:m*ny], m, ny)
+xf = _blocktranspose(view(xr, 1:ny*nf, :), ny, ny, nf)
+F  = PolyMatrix(vcat(eye(Float64,ny), xf), (ny,ny))
+B  = PolyMatrix(vcat(zeros(Float64,ny*nk[1],nu), xf), (ny,nu))
+
+u = randn(nu,N)
+
+
+filt(B, F, u)
+
+function f4(x::Vector, u)
+  N  = 100
+  ny = ny = 2
+  m  = ny*nf+nu*nb
+
+  xr = reshape(x[1:m*ny], m, ny)
+  xf = _blocktranspose(view(xr, 1:ny*nf, :), ny, ny, nf)
+  F  = PolyMatrix(vcat(eye(Float64,ny), xf), (ny,ny))
+  B  = PolyMatrix(vcat(zeros(Float64,ny*nk[1],nu), xf), (ny,nu))
+  sumabs2(filt(B, F, u) - ones(u))
+end
+
+f4(x,u)
+f5 = x->f4(x,u)
+
+g = x -> ForwardDiff.gradient(f5, x)
+g(x)
+
+function f2(x::Vector, u)
+  A = reshape(x[1:4], 2, 2)
+  B = reshape(x[5:8], 2, 2)
+  return sumabs2(A*B)
+end
+
+x = randn(8)
+f6 = x->f2(x,u)
+g = x -> ForwardDiff.gradient(f6, x)
+g(x)
+
+using Polynomials, Optim, PolynomialMatrices, SystemsBase, ToeplitzMatrices, GeneralizedSchurAlgorithm
+#, Compat
+using ForwardDiff
+A = zeros(ForwardDiff.Dual{10,Float64}, 2, 2)
+b = zeros(ForwardDiff.Dual{10,Float64}, 2)
+A * b
+
+
+x = rand(5)
+g = x -> ForwardDiff.gradient(f5, x)
+g(x)
+
+g1 = x -> ForwardDiff.gradient(f1, x)
+x = randn(4)
+g1(x)
+
+g2 = x -> ForwardDiff.gradient(f2, x)
+x = randn(4)
+g2(x)
+
+g3 = x -> ForwardDiff.gradient(f3, x)
+x = randn(8)
+g3(x)
+
+
+
 
 b = [0.3]
 f = [0.5]
@@ -53,7 +144,7 @@ F = [1; f]
 
 nb = nf = 3
 
-N  = 2000
+N  = 200
 u1 = randn(N)
 u2 = randn(N)
 lambda = 0.1
@@ -84,7 +175,7 @@ m0 = max(nb,nf)*ny
 cost(data2, model, randn(m+m0))
 _mse(data2, model, randn(m+m0))
 
-
+typeof(model)
 psi = psit(data2, model, randn(m+m0))
 orders(model)
 
@@ -95,7 +186,7 @@ x0 = vcat(x0,zeros(m0))
 options = IdOptions(extended_trace=false, iterations = 100, autodiff=true, show_trace=true, estimate_initial=false)
 cost(data2, model, x0, options)
 
-@time sys1 = pem(data2, model, x0 + 0.01*randn(length(x0)), options) # , IdOptions(f_tol = 1e-32)
+@time sys1 = pem(data2, model, x0 + 0.1*randn(length(x0)), options) # , IdOptions(f_tol = 1e-32)
 B1 = sys1.B
 F1 = sys1.F
 sys1.info.opt
