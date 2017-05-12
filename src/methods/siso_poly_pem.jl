@@ -66,34 +66,34 @@ function psit{T<:Real,V1,V2,O,M}(
 
   cump = 0
   # a
-  _fill_psi(Psit, cump, na, d, c, y)
+  _fill_psi(Psit, N, cump, na, d, c, y)
   cump += na
   # b
-  _fill_psi(Psit, cump, nb,  d, c*f, u)
+  _fill_psi(Psit, N, cump, nb,  d, c*f, u)
   cump += nb
   # f
-  _fill_psi(Psit, cump, nf, -d, c*f, w)
+  _fill_psi(Psit, N, cump, nf, -d, c*f, w)
   cump += nf
   # c
-  _fill_psi(Psit, cump, nc, -onepoly, c, ϵ)
+  _fill_psi(Psit, N, cump, nc, -onepoly, c, ϵ)
   cump += nc
   # d
-  _fill_psi(Psit, cump, nd, onepoly, c, v)
+  _fill_psi(Psit, N, cump, nd, onepoly, c, v)
   cump += nd
 
   if estimate_initial
-    _fill_psi_ic(Psit, cump, nbf, b, f)
+    _fill_psi_ic(Psit, N, cump, nbf, b, f)
     cump += nbf
-    _fill_psi_ic(Psit, cump, ndc, d, c)
+    _fill_psi_ic(Psit, N, cump, ndc, d, c)
     cump += ndc
-    _fill_psi_ic(Psit, cump, ncda, c-d*a, c)
+    _fill_psi_ic(Psit, N, cump, ncda, c-d*a, c)
     cump += ncda
   end
 
   return Psit
 end
 
-function _fill_psi_ic(Psit, m, n, a, b)
+function _fill_psi_ic(Psit, N, m, n, a, b)
   if n > 0
     T        = eltype(Psit)
     state    = zeros(T, 1, n)
@@ -103,7 +103,7 @@ function _fill_psi_ic(Psit, m, n, a, b)
   end
 end
 
-function _fill_psi(Psit, m, n, a, b, u)
+function _fill_psi(Psit, N, m, n, a, b, u)
   if n > 0
     v = filt(a,b,u)
     T = eltype(v)

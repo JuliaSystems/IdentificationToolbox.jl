@@ -1,6 +1,7 @@
-function _morsm{T<:Real,A1,A2,S,OE}(
-  data::IdDataObject{T,A1,A2}, model::PolyModel{S,FullPolyOrder,OE},
-  options::IdOptions=IdOptions(estimate_initial=false))
+function _morsm{T<:Real,A1,A2,S,ORD<:FullPolyOrder}(
+    data::IdDataObject{T,A1,A2}, model::PolyModel{S,ORD,OE},
+    options::IdOptions=IdOptions(estimate_initial=false))
+
   estimate_initial = options.estimate_initial
 
   y,u,N     = data.y,data.u,data.N
@@ -83,7 +84,7 @@ function _morsm{T<:Real,A1,A2,S,OE}(
 end
 
 # Matlab type of model structure
-function _morsm{T<:Real,A1,A2,S,OE}(
+function _morsm{T<:Real,A1,A2,S}(
   data::IdDataObject{T,A1,A2}, model::PolyModel{S,MPolyOrder,OE},
   options::IdOptions=IdOptions(estimate_initial=false))
   any(orders(model)[1] .> 0) && error("MORSM: A can not be estimated")
