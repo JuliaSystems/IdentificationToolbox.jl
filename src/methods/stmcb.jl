@@ -1,5 +1,3 @@
-
-
 function stmcb{T,A1,A2,S,U}(
     data::IdDataObject{T,A1,A2}, model::PolyModel{S,U,OE},
     options::IdOptions=IdOptions(estimate_initial=false),

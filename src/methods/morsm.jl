@@ -1,3 +1,16 @@
+function morsm{T,A1,A2,S,ORD<:FullPolyOrder}(
+    data::IdDataObject{T,A1,A2}, model::PolyModel{S,ORD,OE},
+    options::IdOptions=IdOptions(estimate_initial=false))
+
+  x,pr      = _morsm(data, model, options)
+  mse       = _mse(data, model, x, options)
+  modelfit  = _modelfit(mse, data.y)
+  idinfo    = OneStepIdInfo(mse, modelfit, model)
+  a,b,f,c,d = _getpolys(model, x)
+
+  IdMFD(a, b, f, c, d, data.Ts, idinfo)
+end
+
 function _morsm{T<:Real,A1,A2,S,ORD<:FullPolyOrder}(
     data::IdDataObject{T,A1,A2}, model::PolyModel{S,ORD,OE},
     options::IdOptions=IdOptions(estimate_initial=false))

@@ -7,6 +7,7 @@ import Base: ==, size, length, getindex
 
 # Import printing functions
 import Base: showcompact, show, showall, summary
+import ControlToolbox.dare
 
 import SystemsBase: isdiscrete, samplingtime, numstates, numinputs, numoutputs
 
@@ -52,7 +53,7 @@ include("types/idmodels.jl")
 include("types/idmethods.jl")
 include("types/idinfo.jl")
 include("types/idmfd.jl")
-include("types/iddss.jl")
+include("types/idstatespace.jl")
 include("types/options.jl")
 
 # utilities
@@ -67,6 +68,6 @@ include("methods/siso_poly_pem.jl")
 include("methods/arx.jl")
 include("methods/stmcb.jl")
 include("methods/morsm.jl")
-#include("methods/n4sid.jl")
+include("methods/n4sid.jl")
 
 end # module

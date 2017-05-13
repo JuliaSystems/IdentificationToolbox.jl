@@ -56,6 +56,16 @@ getindex{S}(p::FullPolyOrder{S}, idx::Int, ::Colon) = p
 
 abstract IdModel
 
+immutable SSModel <: IdModel
+  order::Int
+  ny::Int
+  nu::Int
+
+  @compat function (::Type{SSModel})(order::Integer, ny::Integer, nu::Integer)
+    new(order,ny,nu)
+  end
+end
+
 abstract PolyType
 
 immutable FIR     <: PolyType end

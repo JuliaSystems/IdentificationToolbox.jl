@@ -162,7 +162,7 @@ function cost{T<:Real,S,M<:AbstractModelOrder,P,O}(data::IdDataObject{T}, model:
 end
 
 cost{T}(y::AbstractArray{T}, y_est, N::Int, options::IdOptions) =
-  sumvalue(options.loss_function, y, y_est)/(2N)
+  value(options.loss_function, y, y_est, AvgMode.Sum())/2N
 
 function _getpolys{T<:Real,S,M}(model::PolyModel{S,
     MPolyOrder,M}, Θ::Vector{T})
