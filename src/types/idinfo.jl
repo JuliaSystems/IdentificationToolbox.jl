@@ -1,14 +1,14 @@
-abstract IdInfo
+abstract IdInfo{S}
 
-immutable IterativeIdInfo <: IdInfo #{T<:IterativeIdMethod}
+immutable IterativeIdInfo{S} <: IdInfo{S} #{T<:IterativeIdMethod}
   mse::Vector{Float64}
   modelfit::Vector{Float64}
   opt::Optim.OptimizationResults
-  model::IdModel
+  model::IdModel{S}
 end
 
-immutable OneStepIdInfo <: IdInfo #{T<:OneStepIdMethod}
+immutable OneStepIdInfo{S} <: IdInfo{S} #{T<:OneStepIdMethod}
   mse::Vector{Float64}
   modelfit::Vector{Float64}
-  model::IdModel
+  model::IdModel{S}
 end

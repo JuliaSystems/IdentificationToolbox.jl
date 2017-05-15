@@ -54,15 +54,15 @@ getindex{S}(p::FullPolyOrder{S}, ::Colon, ::Colon)  = p
 getindex{S}(p::FullPolyOrder{S}, ::Colon, idx::Int) = p[1,idx]
 getindex{S}(p::FullPolyOrder{S}, idx::Int, ::Colon) = p
 
-abstract IdModel
+abstract IdModel{S}
 
-immutable SSModel <: IdModel
+immutable SSModel{S} <: IdModel{S}
   order::Int
   ny::Int
   nu::Int
 
-  @compat function (::Type{SSModel})(order::Integer, ny::Integer, nu::Integer)
-    new(order,ny,nu)
+  @compat function (::Type{SSModel}){S}(order::Integer, ny::Integer, nu::Integer, ::Type{Val{S}})
+    new{Val{S}}(order,ny,nu)
   end
 end
 
@@ -79,7 +79,7 @@ immutable OE      <: PolyType end
 immutable BJ      <: PolyType end
 immutable CUSTOM  <: PolyType end
 
-immutable PolyModel{S,M,P} <: IdModel
+immutable PolyModel{S,M,P} <: IdModel{S}
   orders::M
   ny::Int
   nu::Int

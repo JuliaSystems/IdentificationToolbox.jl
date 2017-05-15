@@ -10,6 +10,7 @@ import Base: showcompact, show, showall, summary
 import ControlToolbox.dare
 
 import SystemsBase: isdiscrete, samplingtime, numstates, numinputs, numoutputs
+import SystemsBase: ss, tf, lfd
 
 # using some PolynomialMatrices filtering
 using PolynomialMatrices._filt_fir!

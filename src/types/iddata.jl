@@ -1,52 +1,59 @@
-#####################################################################
-#=                     IDDATA
-            Datatype for System Identification
-
-N    :   number of samples
-nu   :   number of input channel
-ny   :   number of output channel
-Ts   :   Sampling time
-y    :   N by ny matrix
-u    :   N by nu matrix
-
-Author : Lars Lindemann @2015
-
-                                                                   =#
-#####################################################################
-
 immutable IdDataObject{T<:Real,V1<:AbstractArray{T},V2<:AbstractArray{T}}
-    y::V1
-    u::V2
-    Ts::Float64
-    N::Int
-    nu::Int
-    ny::Int
+  y::V1
+  u::V2
+  Ts::Float64
+  N::Int
+  nu::Int
+  ny::Int
 
-    @compat function (::Type{IdDataObject}){T}(y::AbstractArray{T}, u::AbstractArray{T}, Ts::Float64)
-        N   = size(y, 2)
-        ny  = size(y, 1)
-        nu  = size(u, 1)
+  @compat function (::Type{IdDataObject}){T}(y::AbstractArray{T}, u::AbstractArray{T}, Ts::Float64)
+    N   = size(y, 2)
+    ny  = size(y, 1)
+    nu  = size(u, 1)
 
-        # Validating amount of samples
-        if size(y, 2) != size(u, 2)
-            error("Input and output need to have the same amount of samples")
-        end
-
-        # Validate sampling time
-        if Ts < 0
-            error("Ts must be a real, positive number")
-        end
-        new{T,typeof(y),typeof(u)}(y, u, Ts, N, nu, ny)
+    # Validating amount of samples
+    if size(y, 2) != size(u, 2)
+      warn("Input and output need to have the same amount of samples")
+      throw(DomainError())
     end
+
+    # Validate sampling time
+    if Ts < 0
+      warn("Ts must be a real, positive number")
+      throw(DomainError())
+    end
+    new{T,typeof(y),typeof(u)}(y, u, Ts, N, nu, ny)
+  end
+
+  @compat function (::Type{IdDataObject}){T}(y::AbstractVector{T}, u::AbstractVector{T}, Ts::Float64)
+    N   = length(y)
+    ny  = 1
+    nu  = 1
+
+    # Validating amount of samples
+    if length(y) != length(u)
+      warn("Input and output need to have the same amount of samples")
+      throw(DomainError())
+    end
+
+    # Validate sampling time
+    if Ts < 0
+      warn("Ts must be a real, positive number")
+      throw(DomainError())
+    end
+    new{T,typeof(y.'),typeof(u.')}(y.', u.', Ts, N, nu, ny)
+  end
 end
 
 #####################################################################
 ##                      Constructor Functions                      ##
 #####################################################################
-@doc """`IdData = IdData(y, u, Ts=1, outputnames="", inputnames="")`
+"""
+    `IdData = IdData(y, u, Ts=1)`
 
 Creates an IdDataObject that can be used for System Identification. y and u should have the data arranged in columns.
-Use for example sysIdentData = IdData(y1,[u1 u2],Ts,"Out",["In1" "In2"])""" ->
+Use for example sysIdentData = IdData(y1,[u1 u2],Ts,"Out",["In1" "In2"])
+"""
 function iddata(y::AbstractArray, u::AbstractArray, Ts::Real=1.)
     y,u = promote(y,u)
     return IdDataObject(y, u, convert(Float64,Ts))

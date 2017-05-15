@@ -32,6 +32,10 @@ end
 #   x0  = get_param(s1,n)
 #   pem(data, n, x0, method)
 # end
+function pem{T1<:Real,V1,V2}(
+  data::IdDataObject{T1,V1,V2}, sysinit::IdMFD, options::IdOptions=IdOptions())
+  pem(data, sysinit.info.model, get_params(sysinit), options)
+end
 
 function pem{S<:PolyModel, T1<:Real, T2<:Real,V1,V2}(
     data::IdDataObject{T1,V1,V2}, model::S, x0::AbstractVector{T2}, options::IdOptions=IdOptions())
@@ -44,7 +48,7 @@ function pem{S<:PolyModel, T1<:Real, T2<:Real,V1,V2}(
   opt::Optim.OptimizationResults
   if !options.OptimizationOptions.autodiff
     storage = zeros(k, k+1)
-    df = TwiceDifferentiableFunction(x    -> cost(data, model, x, options),
+    df = TwiceDifferentiable(x -> cost(data, model, x, options),
     (x,g) -> g!(data, model, x, last_x, last_V, g, storage, options),
     (x,H) -> h!(data, model, x, last_x, last_V, H, storage, options))
     opt = optimize(df, x0, Newton(), options.OptimizationOptions)

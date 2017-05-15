@@ -1,7 +1,31 @@
 immutable N4SID <: OneStepIdMethod
 end
 
+function n4sid{T,V<:AbstractVector}(d::IdDataObject{T,V,V}, n::Integer=-1,
+  i::Integer=(n==-1 ? 5 : n+1), h::Integer=i; gamma::Real=0.95)
+
+  A,B,C,D,K,Σ,Ts,mse,modelfit = _n4sid(d,n,i,h,gamma=gamma)
+  model = SSModel(n,d.ny,d.nu,Val{:siso})
+  info  = OneStepIdInfo(mse, modelfit, model)
+  IdStateSpace(A,B,C,D[1],K,Σ,Ts,info)
+end
+
 function n4sid{T,A1,A2}(d::IdDataObject{T,A1,A2}, n::Integer=-1,
+  i::Integer=(n==-1 ? 5 : n+1), h::Integer=i; gamma::Real=0.95)
+
+  A,B,C,D,K,Σ,Ts,mse,modelfit = _n4sid(d,n,i,h,gamma=gamma)
+  if d.ny == d.nu == 1
+    model = SSModel(n,d.ny,d.nu,Val{:siso})
+    info  = OneStepIdInfo(mse, modelfit, model)
+    IdStateSpace(A,B,C,D[1],K,Σ,Ts,info)
+  else
+    model = SSModel(n,d.ny,d.nu,Val{:mimo})
+    info  = OneStepIdInfo(mse, modelfit, model)
+    IdStateSpace(A,B,C,D,K,Σ,Ts,info)
+  end
+end
+
+function _n4sid{T,A1,A2}(d::IdDataObject{T,A1,A2}, n::Integer=-1,
   i::Integer=(n==-1 ? 5 : n+1), h::Integer=i; gamma::Real=0.95)
   y, u = d.y.', d.u.'
   N, ny = size(y,1,2)
@@ -86,10 +110,7 @@ function n4sid{T,A1,A2}(d::IdDataObject{T,A1,A2}, n::Integer=-1,
   mse = E/N
   modelfit = [100*(1 - mse[i]/cov(y[i,1:N])) for i in 1:ny]
 
-  model = SSModel(n,ny,nu)
-  info = OneStepIdInfo(mse, modelfit, model)
-
-  IdStateSpace(Ahat, Bhat, Chat, Dhat, Khat, Sigma, d.Ts, info)
+  Ahat, Bhat, Chat, Dhat, Khat, Sigma, d.Ts, mse, modelfit
 end
 
 function hankel_data(y, u, i, h)

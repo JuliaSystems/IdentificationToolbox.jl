@@ -1,5 +1,4 @@
-
-immutable IdMFD{T,S,L,M1,M2,M3,M4,M5,C1,C2} <: SystemsBase.LtiSystem{T,S}
+immutable IdMFD{T,S,C,L,M1,M2,M3,M4,M5,C1,C2} <: SystemsBase.LtiSystem{T,S}
   A::M1
   B::M2
   F::M3
@@ -11,11 +10,22 @@ immutable IdMFD{T,S,L,M1,M2,M3,M4,M5,C1,C2} <: SystemsBase.LtiSystem{T,S}
 
   # Discrete-time, single-input-single-output MFD model
   @compat function (::Type{IdMFD}){T}(A::Poly{T}, B::Poly{T}, F::Poly{T}, C::Poly{T},
-    D::Poly{T}, Ts::Float64, info::IdInfo)
+    D::Poly{T}, Ts::Float64, info::IdInfo{Val{:siso}})
     G = SystemsBase.lfd(B, A*F, Ts)
     H = SystemsBase.lfd(C, A*D, Ts)
     M = Poly{T}
-    new{Val{:siso},Val{:disc},Val{:lfd},M,M,M,M,M,typeof(G),typeof(H)}(
+    new{T,Val{:siso},Val{:disc},Val{:lfd},M,M,M,M,M,typeof(G),typeof(H)}(
+      A, B, F, C, D, G, H, info)
+  end
+
+  @compat function (::Type{IdMFD}){M1<:PolynomialMatrices.PolyMatrix,
+    M2<:PolynomialMatrices.PolyMatrix, M3<:PolynomialMatrices.PolyMatrix,
+    M4<:PolynomialMatrices.PolyMatrix, M5<:PolynomialMatrices.PolyMatrix}(
+      A::M1, B::M2, F::M3, C::M4, D::M5, Ts::Float64, info::IdInfo{Val{:siso}})
+    G = SystemsBase.lfd(B[1], (A*F)[1], Ts)
+    H = SystemsBase.lfd(C[1], (A*D)[1], Ts)
+    new{eltype(mattype(A)),Val{:siso},Val{:disc},Val{:lfd},M1,M2,M3,M4,M5,
+      typeof(G),typeof(H)}(
       A, B, F, C, D, G, H, info)
   end
 
@@ -23,18 +33,19 @@ immutable IdMFD{T,S,L,M1,M2,M3,M4,M5,C1,C2} <: SystemsBase.LtiSystem{T,S}
   @compat function (::Type{IdMFD}){M1<:PolynomialMatrices.PolyMatrix,
     M2<:PolynomialMatrices.PolyMatrix, M3<:PolynomialMatrices.PolyMatrix,
     M4<:PolynomialMatrices.PolyMatrix, M5<:PolynomialMatrices.PolyMatrix}(
-      A::M1, B::M2, F::M3, C::M4, D::M5, Ts::Float64, info::IdInfo)
+      A::M1, B::M2, F::M3, C::M4, D::M5, Ts::Float64, info::IdInfo{Val{:mimo}})
     G = SystemsBase.lfd(B, A*F, Ts)
     H = SystemsBase.lfd(C, A*D, Ts)
-    new{Val{:mimo},Val{:disc},Val{:lfd},M1,M2,M3,M4,M5,typeof(G),typeof(H)}(
+    new{eltype(mattype(A)),Val{:mimo},Val{:disc},Val{:lfd},M1,M2,M3,M4,M5,
+      typeof(G),typeof(H)}(
       A, B, F, C, D, G, H, info)
   end
 end
 
 # Outer constructors
-function IdMFD{T<:AbstractFloat, S<:IdInfo}(a::AbstractVector{T},
+function IdMFD{T<:AbstractFloat, S}(a::AbstractVector{T},
     b::AbstractVector{T}, f::AbstractVector{T}, c::AbstractVector{T},
-    d::AbstractVector{T}, Ts::Float64, info::S)
+    d::AbstractVector{T}, Ts::Float64, info::IdInfo{S})
   na = length(a)
   nb = length(b)
   nf = length(f)
@@ -60,9 +71,9 @@ function IdMFD{T<:AbstractFloat, S<:IdInfo}(a::AbstractVector{T},
   IdMFD(A,B,F,C,D,Ts,info)
 end
 
-function IdMFD{T<:AbstractFloat, S<:IdInfo}(a::AbstractMatrix{T},
+function IdMFD{T<:AbstractFloat, S}(a::AbstractMatrix{T},
     b::AbstractMatrix{T}, f::AbstractMatrix{T}, c::AbstractMatrix{T},
-    d::AbstractMatrix{T}, Ts::Float64, info::S, ny::Int)
+    d::AbstractMatrix{T}, Ts::Float64, info::IdInfo{S}, ny::Int)
 
   A = PolyMatrix(a, (ny, size(a,2)))
   B = PolyMatrix(b, (ny, size(b,2)))
@@ -73,6 +84,10 @@ function IdMFD{T<:AbstractFloat, S<:IdInfo}(a::AbstractMatrix{T},
   IdMFD(A,B,F,C,D,Ts,info)
 end
 
+# conversion to tf
+tf(s::IdMFD)  = tf(s.G)
+lfd(s::IdMFD) = lfd(s.G)
+
 samplingtime(s::IdMFD) = s.G.Ts
 isdiscrete(s::IdMFD)   = true
 getmatrix(s::IdMFD)    = reshape([s.G; s.H],1,2)
@@ -80,21 +95,22 @@ numstates(s::IdMFD)    = numstates(s.G)
 numoutputs(s::IdMFD)   = numoutputs(s.G)
 numinputs(s::IdMFD)    = numinputs(s.G)
 
+function _append_params(x, p, p0)
+  for (k,v) in coeffs(p)
+    if k > p0
+      append!(x, v.'[:])
+    end
+  end
+end
 
-function get_param{T<:AbstractFloat, S<:IdInfo}(s::IdMFD{T,S},
-    n::Vector{Int})
-  nk = n[end]
-  a = coeffs(s.A)
-  b = coeffs(s.B)
-  f = coeffs(s.F)
-  c = coeffs(s.C)
-  d = coeffs(s.D)
+function get_params{T}(s::IdentificationToolbox.IdMFD{T})
   x = Vector{T}(0)
-  x = length(a) > 1 ? vcat(x, reverse(a[1:end-1])) : x
-  x = vcat(x, reverse(b))
-  x = length(f) > 1 ? vcat(x, reverse(f[1:end-1])) : x
-  x = length(c) > 1 ? vcat(x, reverse(c[1:end-1])) : x
-  x = length(d) > 1 ? vcat(x, reverse(d[1:end-1])) : x
+  _append_params(x, s.A, 0)
+  _append_params(x, s.B, 0)
+  _append_params(x, s.F, 0)
+  _append_params(x, s.C, 0)
+  _append_params(x, s.D, 0)
+  return x
 end
 
 function predict{T1<:Real, V1<:AbstractVector, V2<:AbstractVector,
