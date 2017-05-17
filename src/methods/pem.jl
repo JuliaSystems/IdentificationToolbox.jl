@@ -96,11 +96,11 @@ function _getpolys{T<:Real,S,M}(model::PolyModel{S,
   xd = _blocktranspose(view(xr, ny*(na+nf+nc)+nu*nb+(1:ny*nd), :), ny, ny, nd)
 
   # zero pad vectors
-  A = PolyMatrix(vcat(eye(T,ny),         xa), (ny,ny))
-  B = PolyMatrix(vcat(zeros(T,ny*nk[1],nu), xb), (ny,nu)) # TODO fix nk
-  F = PolyMatrix(vcat(eye(T,ny),         xf), (ny,ny))
-  C = PolyMatrix(vcat(eye(T,ny),         xc), (ny,ny))
-  D = PolyMatrix(vcat(eye(T,ny),         xd), (ny,ny))
+  A = PolyMatrix(vcat(eye(T,ny),         xa), (ny,ny), :z̄)
+  B = PolyMatrix(vcat(zeros(T,ny*nk[1],nu), xb), (ny,nu), :z̄) # TODO fix nk
+  F = PolyMatrix(vcat(eye(T,ny),         xf), (ny,ny), :z̄)
+  C = PolyMatrix(vcat(eye(T,ny),         xc), (ny,ny), :z̄)
+  D = PolyMatrix(vcat(eye(T,ny),         xd), (ny,ny), :z̄)
 
   return A,B,F,C,D
 end
@@ -171,11 +171,11 @@ cost{T}(y::AbstractArray{T}, y_est, N::Int, options::IdOptions) =
 function _getpolys{T<:Real,S,M}(model::PolyModel{S,
     MPolyOrder,M}, Θ::Vector{T})
   a,b,f,c,d = _getmatrix(model, Θ)
-  A = map(x->Poly(x),a)  |> PolyMatrix
-  B = map(x->Poly(x),b)  |> PolyMatrix
-  F = map(x->Poly(x),f)  |> PolyMatrix
-  C = map(x->Poly(x), c) |> diagm |> PolyMatrix
-  D = map(x->Poly(x), d) |> diagm |> PolyMatrix
+  A = map(x->Poly(x, :z̄),a)  |> PolyMatrix
+  B = map(x->Poly(x, :z̄),b)  |> PolyMatrix
+  F = map(x->Poly(x, :z̄),f)  |> PolyMatrix
+  C = map(x->Poly(x, :z̄), c) |> diagm |> PolyMatrix
+  D = map(x->Poly(x, :z̄), d) |> diagm |> PolyMatrix
   return A,B,F,C,D
 end
 

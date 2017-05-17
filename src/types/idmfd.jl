@@ -85,7 +85,7 @@ function IdMFD{T<:AbstractFloat, S}(a::AbstractMatrix{T},
 end
 
 # conversion to tf
-tf(s::IdMFD)  = tf(s.G)
+tf(s::IdMFD{Val{:siso},Val{:disc}}) = tf(coeffs(s.G.N), coeffs(s.G.D), s.G.Ts, :z̄)
 lfd(s::IdMFD) = lfd(s.G)
 
 samplingtime(s::IdMFD) = s.G.Ts

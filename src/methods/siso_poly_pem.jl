@@ -52,7 +52,7 @@ function psit{T<:Real,V1,V2,O,M}(
   Θₚ,icbf,icdc,iccda = _split_params(model, Θ, options)
 
   a,b,f,c,d = _getpolys(model, Θₚ)
-  onepoly   = PolyMatrix(ones(T,1,1))
+  onepoly   = PolyMatrix(ones(T,1,1), :z̄)
 
   nbf       = max(nb, nf)
   ndc       = max(nd, nc)
