@@ -121,16 +121,50 @@ function _modelfit{T<:Real}(mse, y::AbstractMatrix{T})
   modelfit = [100*(1 - mse[i]/cov(y[i,1:N])) for i in 1:ny] # TODO fix to correct order m y[m:N]
 end
 
+predict{T1,V1,V2}(data::IdDataObject{T1,V1,V2}, sys::IdMFD) =
+  _predict(data,sys.A,sys.B,sys.F,sys.C,sys.D,sys.info.model)
+
+
 function predict{T1,V1,V2,S,U,M,T2,O}(data::IdDataObject{T1,V1,V2},
   model::PolyModel{S,U,M}, Θ::AbstractVector{T2}, options::IdOptions{O}=IdOptions())
   Θₚ,icbf,icdc,iccda = _split_params(model, Θ, options)
   a,b,f,c,d          = _getpolys(model, Θₚ)
+
+  return _predict(data,a,b,f,c,d,model,icbf,icdc,iccda)
   na,nb,nf,nc,nd,nk  = orders(model)
 
   ny   = data.ny
   nbf  = max(nb, nf)
   ndc  = max(nd, nc)
   ncda = max(nc, nd+na)
+
+  # save unnecessary computations
+  temp  = nbf > 0 ? filt(b, f, data.u, icbf) : data.u
+  temp2 = ndc > 0 ? filt(d, c, temp, icdc) : temp
+  temp3 = ncda > 0 ? temp2 + filt(c-d*a, c, data.y, iccda) : temp2
+  return temp3 # 10.53 [Ljung1999]
+end
+
+function _predict{T1,V1,V2,S,U,M}(data::IdDataObject{T1,V1,V2},a,b,f,c,d,
+  model::PolyModel{S,U,M},icbf=zeros(T1,0,0),
+  icdc=zeros(T1,0,0),iccda=zeros(T1,0,0))
+
+  na,nb,nf,nc,nd,nk  = orders(model)
+
+  ny   = data.ny
+  nbf  = max(nb, nf)
+  ndc  = max(nd, nc)
+  ncda = max(nc, nd+na)
+
+  if length(icbf) == 0
+    icbf = zeros(T1, ny*nk[1], nbf)
+  end
+  if length(icdc) == 0
+    icdc = zeros(T1, ny, ndc)
+  end
+  if length(iccda) == 0
+    iccda = zeros(T1, ny, ncda)
+  end
 
   # save unnecessary computations
   temp  = nbf > 0 ? filt(b, f, data.u, icbf) : data.u

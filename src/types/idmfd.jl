@@ -85,8 +85,10 @@ function IdMFD{T<:AbstractFloat, S}(a::AbstractMatrix{T},
 end
 
 # conversion to tf
-tf(s::IdMFD{Val{:siso},Val{:disc}}) = tf(coeffs(s.G.N), coeffs(s.G.D), s.G.Ts, :z̄)
+tf{T}(s::IdMFD{T,Val{:siso},Val{:disc}}) = tf(coeffs(s.B[1]), coeffs(s.F[1]), s.G.Ts, :z̄)
 lfd(s::IdMFD) = lfd(s.G)
+ss{T}(s::IdMFD{T,Val{:siso},Val{:disc}}) = ss(tf(s))
+
 
 samplingtime(s::IdMFD) = s.G.Ts
 isdiscrete(s::IdMFD)   = true
