@@ -128,14 +128,11 @@ end
 Define the PolyModel(`na`,`nb`,`nf`,`nc`,`nd`) model structure:
     A(z)y(t) = F(z)\B(z) z^-`nk`u(t) + D(z)\C(z)e(t)
 """
+# TODO: reconsider
 function PolyModel(; na::Int=0, nb::Int=0, nf::Int=0, nc::Int=0, nd::Int=0,
-  nk::Int=1, ny::Int=1, nu::Int=1)
-  _PolyModel(Val{S}; na=na, nb=nb, nf=nf, nc=nc, nd=nd, nk=[nk], ny=ny, nu=nu)
-end
-
-function PolyModel(; na::Int=0, nb::Int=0, nf::Int=0, nc::Int=0, nd::Int=0,
-  nk::Vector{Int}=[1], ny::Int=1, nu::Int=1)
-  _PolyModel(Val{S}; na=na, nb=nb, nf=nf, nc=nc, nd=nd, nk=nk, ny=ny, nu=nu)
+  nk::Union{Int,Vector{Int}}=1, ny::Int=1, nu::Int=1)
+  isa(nk, Int) ? _PolyModel(Val{:siso}; na=na, nb=nb, nf=nf, nc=nc, nd=nd, nk=[nk], ny=ny, nu=nu) :
+                 _PolyModel(Val{:mimo}; na=na, nb=nb, nf=nf, nc=nc, nd=nd, nk=nk, ny=ny, nu=nu)
 end
 
 function _PolyModel{S}(::Type{Val{S}}; na::Int=0,nb::Int=0,nf::Int=0,nc::Int=0,nd::Int=0,
