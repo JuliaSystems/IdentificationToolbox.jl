@@ -1,4 +1,4 @@
-immutable IdMFD{T,S,C,L,M1,M2,M3,M4,M5,C1,C2} <: SystemsBase.LtiSystem{T,S}
+immutable IdMFD{S,C,L,M1,M2,M3,M4,M5,C1,C2} <: SystemsBase.LtiSystem{S,C}
   A::M1
   B::M2
   F::M3
@@ -14,7 +14,7 @@ immutable IdMFD{T,S,C,L,M1,M2,M3,M4,M5,C1,C2} <: SystemsBase.LtiSystem{T,S}
     G = SystemsBase.lfd(B, A*F, Ts)
     H = SystemsBase.lfd(C, A*D, Ts)
     M = Poly{T}
-    new{T,Val{:siso},Val{:disc},Val{:lfd},M,M,M,M,M,typeof(G),typeof(H)}(
+    new{Val{:siso},Val{:disc},Val{:lfd},M,M,M,M,M,typeof(G),typeof(H)}(
       A, B, F, C, D, G, H, info)
   end
 
@@ -24,7 +24,7 @@ immutable IdMFD{T,S,C,L,M1,M2,M3,M4,M5,C1,C2} <: SystemsBase.LtiSystem{T,S}
       A::M1, B::M2, F::M3, C::M4, D::M5, Ts::Float64, info::IdInfo{Val{:siso}})
     G = SystemsBase.lfd(B[1], (A*F)[1], Ts)
     H = SystemsBase.lfd(C[1], (A*D)[1], Ts)
-    new{eltype(mattype(A)),Val{:siso},Val{:disc},Val{:lfd},M1,M2,M3,M4,M5,
+    new{Val{:siso},Val{:disc},Val{:lfd},M1,M2,M3,M4,M5,
       typeof(G),typeof(H)}(
       A, B, F, C, D, G, H, info)
   end
@@ -36,7 +36,7 @@ immutable IdMFD{T,S,C,L,M1,M2,M3,M4,M5,C1,C2} <: SystemsBase.LtiSystem{T,S}
       A::M1, B::M2, F::M3, C::M4, D::M5, Ts::Float64, info::IdInfo{Val{:mimo}})
     G = SystemsBase.lfd(B, A*F, Ts)
     H = SystemsBase.lfd(C, A*D, Ts)
-    new{eltype(mattype(A)),Val{:mimo},Val{:disc},Val{:lfd},M1,M2,M3,M4,M5,
+    new{Val{:mimo},Val{:disc},Val{:lfd},M1,M2,M3,M4,M5,
       typeof(G),typeof(H)}(
       A, B, F, C, D, G, H, info)
   end
@@ -85,9 +85,11 @@ function IdMFD{T<:AbstractFloat, S}(a::AbstractMatrix{T},
 end
 
 # conversion to tf
-tf{T}(s::IdMFD{T,Val{:siso},Val{:disc}}) = tf(coeffs(s.B[1]), coeffs(s.F[1]), s.G.Ts, :z̄)
+tf(s::IdMFD{Val{:siso},Val{:disc}}) = tf(coeffs(s.B[1]), coeffs(s.F[1]), s.G.Ts, :z̄)
+
 lfd(s::IdMFD) = lfd(s.G)
-ss{T}(s::IdMFD{T,Val{:siso},Val{:disc}}) = ss(tf(s))
+
+ss(s::IdMFD{Val{:siso},Val{:disc}}) = ss(tf(s))
 
 
 samplingtime(s::IdMFD) = s.G.Ts
@@ -105,7 +107,10 @@ function _append_params(x, p, p0)
   end
 end
 
-function get_params{T}(s::IdentificationToolbox.IdMFD{T})
+function get_params{S,C,L,M1,M2,M3,M4,M5,C1,C2}(
+  s::IdMFD{S,C,L,M1,M2,M3,M4,M5,C1,C2})
+
+  T = eltype(mattype(s.A))
   x = Vector{T}(0)
   _append_params(x, s.A, 0)
   _append_params(x, s.B, 0)
@@ -115,9 +120,7 @@ function get_params{T}(s::IdentificationToolbox.IdMFD{T})
   return x
 end
 
-function predict{T1<:Real, V1<:AbstractVector, V2<:AbstractVector,
-    T2<:AbstractFloat, S<:IdInfo}(
-    data::IdDataObject{T1,V1,V2}, sys::IdMFD{T2,S})
-  n = sys.info.n
-  return predict(data, n, get_param(sys,n), sys.info.method)
-end
+# function predict(data::IdDataObject, sys::IdMFD)
+#   n = sys.info.n
+#   return predict(data, n, get_param(sys,n), sys.info.method)
+# end
