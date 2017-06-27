@@ -1,4 +1,4 @@
-abstract IdInfo{S}
+@compat abstract type IdInfo{S} end
 
 immutable IterativeIdInfo{S} <: IdInfo{S} #{T<:IterativeIdMethod}
   mse::Vector{Float64}

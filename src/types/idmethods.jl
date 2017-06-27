@@ -1,8 +1,8 @@
-abstract AbstractIdMethod
+@compat abstract type AbstractIdMethod end
 
-abstract IterativeIdMethod <: AbstractIdMethod
+@compat abstract type IterativeIdMethod <: AbstractIdMethod end
 
-abstract OneStepIdMethod <: AbstractIdMethod
+@compat abstract type OneStepIdMethod <: AbstractIdMethod end
 
 function fval{T1<:Real, V1<:AbstractVector, V2<:AbstractVector, T2<:Real}(
     method::IterativeIdMethod, data::IdDataObject{T1,V1,V2}, n::Vector{Int}, x::Vector{T2},

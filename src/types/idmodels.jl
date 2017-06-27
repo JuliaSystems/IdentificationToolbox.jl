@@ -1,4 +1,4 @@
-abstract AbstractModelOrder
+@compat abstract type AbstractModelOrder end
 
 immutable FullPolyOrder{S} <: AbstractModelOrder
   na::Int
@@ -54,7 +54,7 @@ getindex{S}(p::FullPolyOrder{S}, ::Colon, ::Colon)  = p
 getindex{S}(p::FullPolyOrder{S}, ::Colon, idx::Int) = p[1,idx]
 getindex{S}(p::FullPolyOrder{S}, idx::Int, ::Colon) = p
 
-abstract IdModel{S}
+@compat abstract type IdModel{S} end
 
 immutable SSModel{S} <: IdModel{S}
   order::Int
@@ -66,7 +66,7 @@ immutable SSModel{S} <: IdModel{S}
   end
 end
 
-abstract PolyType
+@compat abstract type PolyType end
 
 immutable FIR     <: PolyType end
 immutable AR      <: PolyType end

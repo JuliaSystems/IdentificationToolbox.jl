@@ -1,4 +1,4 @@
-immutable IdStateSpace{T,S,M,I<:IdInfo} <: SystemsBase.LtiSystem
+immutable IdStateSpace{T,S,M,I} <: SystemsBase.LtiSystem{T,S}
   A::M
   B::M
   C::M
@@ -35,26 +35,6 @@ ss(s::IdStateSpace{Val{:mimo},Val{:disc}}) = ss(s.A, s.B, s.C, s.D, s.Ts)
 samplingtime(s::IdStateSpace) = s.Ts
 isdiscrete(s::IdStateSpace)   = true
 
-summary(s::IdStateSpace) = string("ss(nx=", s.nx, ",nu=", s.nu, ",ny=", s.ny, ",Ts=",
-  s.Ts, ")")
-
-showcompact(io::IO, s::IdStateSpace) = print(io, summary(s))
-
-function show(io::IO, s::IdStateSpace)
-  println(io, "Discrete time state space model")
-  println(io, "\tx[k+1] = Ax[k] + Bu[k]")
-  println(io, "\ty[k]   = Cx[k] + Du[k]")
-  print(io, "with nx=", s.nx, ", nu=", s.nu, ", ny=", s.ny, ", Ts=", s.Ts, ".")
-end
-
-function showall(io::IO, s::IdStateSpace)
-  show(io, s)
-  println(io, "System matrix (A):")
-  println(io, s.A)
-  println(io, "Input matrix (B):")
-  println(io, s.B)
-  println(io, "Output matrix (C):")
-  println(io, s.C)
-  println(io, "Feedforward matrix (D):")
-  print(io, s.D)
-end
+numstates(s::IdStateSpace)    = s.nx
+numinputs(s::IdStateSpace)    = s.nu
+numoutputs(s::IdStateSpace)   = s.ny
