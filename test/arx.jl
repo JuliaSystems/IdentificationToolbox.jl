@@ -1,4 +1,7 @@
 println("Starting ARX method test...")
+# TODO: Are we exposing IdMFD to the user? If yes, we should `export` it.
+#       Otherwise, we should be `using` it here, when needed.
+using IdentificationToolbox: IdMFD
 
 # Define the true system
 a = [0.5, 0.2, 0.1]
