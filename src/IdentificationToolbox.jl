@@ -1,6 +1,6 @@
 module IdentificationToolbox
 
-using Polynomials, Optim, PolynomialMatrices, SystemsBase, ToeplitzMatrices,
+using Polynomials, Optim, PolynomialMatrices, LTISystems, ToeplitzMatrices,
   Compat, GeneralizedSchurAlgorithm
 
 import Base: ==, size, length, getindex
@@ -9,8 +9,8 @@ import Base: ==, size, length, getindex
 import Base: showcompact, show, showall, summary
 import ControlToolbox.dare
 
-import SystemsBase: isdiscrete, samplingtime, numstates, numinputs, numoutputs
-import SystemsBase: ss, tf, lfd
+import LTISystems: isdiscrete, samplingtime, numstates, numinputs, numoutputs
+import LTISystems: ss, tf, lfd
 
 # using some PolynomialMatrices filtering
 using PolynomialMatrices._filt_fir!

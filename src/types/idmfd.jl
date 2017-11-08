@@ -1,4 +1,4 @@
-immutable IdMFD{S,C,L,M1,M2,M3,M4,M5,C1,C2} <: SystemsBase.LtiSystem{S,C}
+immutable IdMFD{S,C,L,M1,M2,M3,M4,M5,C1,C2} <: LTISystems.LtiSystem{S,C}
   A::M1
   B::M2
   F::M3
@@ -11,8 +11,8 @@ immutable IdMFD{S,C,L,M1,M2,M3,M4,M5,C1,C2} <: SystemsBase.LtiSystem{S,C}
   # Discrete-time, single-input-single-output MFD model
   @compat function (::Type{IdMFD}){T}(A::Poly{T}, B::Poly{T}, F::Poly{T}, C::Poly{T},
     D::Poly{T}, Ts::Float64, info::IdInfo{Val{:siso}})
-    G = SystemsBase.lfd(B, A*F, Ts)
-    H = SystemsBase.lfd(C, A*D, Ts)
+    G = LTISystems.lfd(B, A*F, Ts)
+    H = LTISystems.lfd(C, A*D, Ts)
     M = Poly{T}
     new{Val{:siso},Val{:disc},Val{:lfd},M,M,M,M,M,typeof(G),typeof(H)}(
       A, B, F, C, D, G, H, info)
@@ -22,8 +22,8 @@ immutable IdMFD{S,C,L,M1,M2,M3,M4,M5,C1,C2} <: SystemsBase.LtiSystem{S,C}
     M2<:PolynomialMatrices.PolyMatrix, M3<:PolynomialMatrices.PolyMatrix,
     M4<:PolynomialMatrices.PolyMatrix, M5<:PolynomialMatrices.PolyMatrix}(
       A::M1, B::M2, F::M3, C::M4, D::M5, Ts::Float64, info::IdInfo{Val{:siso}})
-    G = SystemsBase.lfd(B[1], (A*F)[1], Ts)
-    H = SystemsBase.lfd(C[1], (A*D)[1], Ts)
+    G = LTISystems.lfd(B[1], (A*F)[1], Ts)
+    H = LTISystems.lfd(C[1], (A*D)[1], Ts)
     new{Val{:siso},Val{:disc},Val{:lfd},M1,M2,M3,M4,M5,
       typeof(G),typeof(H)}(
       A, B, F, C, D, G, H, info)
@@ -34,8 +34,8 @@ immutable IdMFD{S,C,L,M1,M2,M3,M4,M5,C1,C2} <: SystemsBase.LtiSystem{S,C}
     M2<:PolynomialMatrices.PolyMatrix, M3<:PolynomialMatrices.PolyMatrix,
     M4<:PolynomialMatrices.PolyMatrix, M5<:PolynomialMatrices.PolyMatrix}(
       A::M1, B::M2, F::M3, C::M4, D::M5, Ts::Float64, info::IdInfo{Val{:mimo}})
-    G = SystemsBase.lfd(B, A*F, Ts)
-    H = SystemsBase.lfd(C, A*D, Ts)
+    G = LTISystems.lfd(B, A*F, Ts)
+    H = LTISystems.lfd(C, A*D, Ts)
     new{Val{:mimo},Val{:disc},Val{:lfd},M1,M2,M3,M4,M5,
       typeof(G),typeof(H)}(
       A, B, F, C, D, G, H, info)

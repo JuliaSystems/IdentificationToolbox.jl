@@ -1,8 +1,8 @@
-julia 0.4
+julia 0.5
 Polynomials 0.1.0
 Optim 0.6.0
 LossFunctions 0.0.3
-SystemsBase
+LTISystems 0.1.0
 Compat 0.26.0
 ToeplitzMatrices 0.1.1
 GeneralizedSchurAlgorithm 0.0.2
