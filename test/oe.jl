@@ -109,7 +109,7 @@ f6 = x->f2(x,u)
 g = x -> ForwardDiff.gradient(f6, x)
 g(x)
 
-using Polynomials, Optim, PolynomialMatrices, SystemsBase, ToeplitzMatrices, GeneralizedSchurAlgorithm
+using Polynomials, Optim, PolynomialMatrices, LTISystems, ToeplitzMatrices, GeneralizedSchurAlgorithm
 #, Compat
 using ForwardDiff
 A = zeros(ForwardDiff.Dual{10,Float64}, 2, 2)

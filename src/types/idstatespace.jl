@@ -1,4 +1,4 @@
-immutable IdStateSpace{T,S,M,I} <: SystemsBase.LtiSystem{T,S}
+immutable IdStateSpace{T,S,M,I} <: LTISystems.LtiSystem{T,S}
   A::M
   B::M
   C::M
